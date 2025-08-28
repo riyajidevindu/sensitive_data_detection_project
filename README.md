@@ -63,7 +63,7 @@ pip install -r requirements.txt
 3. **Install frontend dependencies:**
 ```bash
 cd frontend
-npm install
+npm install --legacy-peer-deps
 ```
 
 ### Running the Application

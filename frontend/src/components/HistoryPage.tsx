@@ -5,7 +5,6 @@ import {
   Grid,
   Card,
   CardContent,
-  CardMedia,
   Box,
   Button,
   Alert,
@@ -17,12 +16,8 @@ import {
   DialogActions,
   Chip,
   Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Tooltip,
+  styled,
 } from '@mui/material';
 import {
   Download,
@@ -31,9 +26,15 @@ import {
   Visibility,
   Close,
   Image as ImageIcon,
+  Info,
 } from '@mui/icons-material';
+import { motion, AnimatePresence } from 'framer-motion';
 import ApiService from '../services/api';
 import { FilesListResponse, FileInfo } from '../types/api';
+
+const AnimatedCard = styled(motion.div)({
+  height: '100%',
+});
 
 const HistoryPage: React.FC = () => {
   const [files, setFiles] = useState<FileInfo[]>([]);
@@ -46,7 +47,7 @@ const HistoryPage: React.FC = () => {
     try {
       setLoading(true);
       const response: FilesListResponse = await ApiService.getOutputFiles();
-      setFiles(response.files);
+      setFiles(response.files.sort((a, b) => new Date(b.created).getTime() - new Date(a.created).getTime()));
       setError(null);
     } catch (err: any) {
       setError(`Failed to fetch files: ${err.response?.data?.detail || err.message}`);
@@ -79,257 +80,110 @@ const HistoryPage: React.FC = () => {
     }
   };
 
-  const handlePreview = (filename: string) => {
-    setSelectedImage(filename);
-  };
-
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
+  const formatDate = (dateString: string) => new Date(dateString).toLocaleString();
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { staggerChildren: 0.1 },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: { y: 0, opacity: 1 },
+    exit: { y: -20, opacity: 0 },
   };
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
         <CircularProgress size={60} />
       </Box>
     );
   }
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Typography variant="h4" component="h1">
-          Processing History
-        </Typography>
-        <Button
-          variant="outlined"
-          startIcon={<Refresh />}
-          onClick={fetchFiles}
-          disabled={loading}
-        >
-          Refresh
-        </Button>
-      </Box>
+    <Container maxWidth="lg" sx={{ py: 8 }}>
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+          <Typography variant="h3" component="h1" sx={{ fontWeight: 700 }}>Processing History</Typography>
+          <Button variant="outlined" startIcon={<Refresh />} onClick={fetchFiles} disabled={loading}>
+            Refresh
+          </Button>
+        </Box>
+      </motion.div>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
+      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
-      <Paper elevation={2} sx={{ mb: 3, p: 2 }}>
-        <Typography variant="h6" gutterBottom>
-          Summary
-        </Typography>
-        <Grid container spacing={2}>
-          <Grid item>
-            <Chip
-              icon={<ImageIcon />}
-              label={`${files.length} Processed Files`}
-              color="primary"
-            />
-          </Grid>
-          <Grid item>
-            <Chip
-              label={`Total Size: ${formatFileSize(files.reduce((sum, file) => sum + file.size, 0))}`}
-              color="info"
-            />
-          </Grid>
-        </Grid>
-      </Paper>
-
-      {files.length === 0 ? (
-        <Paper elevation={1} sx={{ p: 4, textAlign: 'center' }}>
-          <ImageIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            No processed files found
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Upload and process some images to see them here.
-          </Typography>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+        <Paper elevation={2} sx={{ mb: 4, p: 2, borderRadius: 2, display: 'flex', gap: 2 }}>
+          <Chip icon={<ImageIcon />} label={`${files.length} Processed Files`} color="primary" />
+          <Chip label={`Total Size: ${formatFileSize(files.reduce((sum, file) => sum + file.size, 0))}`} />
         </Paper>
-      ) : (
-        <>
-          {/* Table View for larger screens */}
-          <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-            <TableContainer component={Paper} elevation={2}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Filename</TableCell>
-                    <TableCell>Size</TableCell>
-                    <TableCell>Created</TableCell>
-                    <TableCell align="center">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {files.map((file) => (
-                    <TableRow key={file.filename} hover>
-                      <TableCell>
-                        <Typography variant="body2" fontWeight="medium">
-                          {file.filename}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{formatFileSize(file.size)}</TableCell>
-                      <TableCell>{formatDate(file.created)}</TableCell>
-                      <TableCell align="center">
-                        <IconButton
-                          size="small"
-                          color="primary"
-                          onClick={() => handlePreview(file.filename)}
-                          title="Preview"
-                        >
-                          <Visibility />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          color="info"
-                          onClick={() => handleDownload(file.filename)}
-                          title="Download"
-                        >
-                          <Download />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => setDeleteConfirm(file.filename)}
-                          title="Delete"
-                        >
-                          <Delete />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
+      </motion.div>
 
-          {/* Card View for smaller screens */}
-          <Box sx={{ display: { xs: 'block', md: 'none' } }}>
-            <Grid container spacing={2}>
+      <AnimatePresence>
+        {files.length === 0 ? (
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
+            <Paper elevation={1} sx={{ p: 6, textAlign: 'center', borderRadius: 2 }}>
+              <ImageIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
+              <Typography variant="h5" color="text.secondary">No processed files found</Typography>
+            </Paper>
+          </motion.div>
+        ) : (
+          <motion.div variants={containerVariants} initial="hidden" animate="visible">
+            <Grid container spacing={3}>
               {files.map((file) => (
-                <Grid item xs={12} sm={6} key={file.filename}>
-                  <Card elevation={2}>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom noWrap>
-                        {file.filename}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
-                        Size: {formatFileSize(file.size)}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
-                        Created: {formatDate(file.created)}
-                      </Typography>
-                      <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
-                        <Button
-                          size="small"
-                          startIcon={<Visibility />}
-                          onClick={() => handlePreview(file.filename)}
-                        >
-                          Preview
-                        </Button>
-                        <Button
-                          size="small"
-                          startIcon={<Download />}
-                          onClick={() => handleDownload(file.filename)}
-                        >
-                          Download
-                        </Button>
-                        <Button
-                          size="small"
-                          color="error"
-                          startIcon={<Delete />}
-                          onClick={() => setDeleteConfirm(file.filename)}
-                        >
-                          Delete
-                        </Button>
+                <Grid item xs={12} sm={6} md={4} key={file.filename}>
+                  <AnimatedCard variants={itemVariants} whileHover={{ y: -5, boxShadow: '0px 10px 20px rgba(0,0,0,0.1)' }}>
+                    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', borderRadius: 2 }}>
+                      <CardContent sx={{ flexGrow: 1 }}>
+                        <Typography variant="h6" noWrap title={file.filename}>{file.filename}</Typography>
+                        <Typography variant="body2" color="text.secondary">Size: {formatFileSize(file.size)}</Typography>
+                        <Typography variant="body2" color="text.secondary">Created: {formatDate(file.created)}</Typography>
+                      </CardContent>
+                      <Box sx={{ p: 1, display: 'flex', justifyContent: 'center', gap: 1 }}>
+                        <Tooltip title="Preview"><IconButton color="primary" onClick={() => setSelectedImage(file.filename)}><Visibility /></IconButton></Tooltip>
+                        <Tooltip title="Download"><IconButton color="info" onClick={() => handleDownload(file.filename)}><Download /></IconButton></Tooltip>
+                        <Tooltip title="Delete"><IconButton color="error" onClick={() => setDeleteConfirm(file.filename)}><Delete /></IconButton></Tooltip>
                       </Box>
-                    </CardContent>
-                  </Card>
+                    </Card>
+                  </AnimatedCard>
                 </Grid>
               ))}
             </Grid>
-          </Box>
-        </>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Image Preview Dialog */}
-      <Dialog
-        open={!!selectedImage}
-        onClose={() => setSelectedImage(null)}
-        maxWidth="lg"
-        fullWidth
-      >
-        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6">
-            {selectedImage}
-          </Typography>
-          <IconButton onClick={() => setSelectedImage(null)}>
-            <Close />
-          </IconButton>
+      <Dialog open={!!selectedImage} onClose={() => setSelectedImage(null)} maxWidth="lg" fullWidth>
+        <DialogTitle>
+          {selectedImage}
+          <IconButton onClick={() => setSelectedImage(null)} sx={{ position: 'absolute', right: 8, top: 8 }}><Close /></IconButton>
         </DialogTitle>
         <DialogContent>
-          {selectedImage && (
-            <Box sx={{ textAlign: 'center' }}>
-              <img
-                src={ApiService.getOutputImageUrl(selectedImage)}
-                alt={selectedImage}
-                style={{
-                  maxWidth: '100%',
-                  maxHeight: '70vh',
-                  objectFit: 'contain',
-                }}
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.style.display = 'none';
-                }}
-              />
-            </Box>
-          )}
+          {selectedImage && <img src={ApiService.getOutputImageUrl(selectedImage)} alt={selectedImage} style={{ width: '100%', height: 'auto' }} />}
         </DialogContent>
-        <DialogActions>
-          <Button
-            startIcon={<Download />}
-            onClick={() => selectedImage && handleDownload(selectedImage)}
-          >
-            Download
-          </Button>
-          <Button onClick={() => setSelectedImage(null)}>
-            Close
-          </Button>
-        </DialogActions>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={!!deleteConfirm}
-        onClose={() => setDeleteConfirm(null)}
-      >
-        <DialogTitle>Confirm Delete</DialogTitle>
+      <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)}>
+        <DialogTitle>Confirm Deletion</DialogTitle>
         <DialogContent>
-          <Typography>
-            Are you sure you want to delete "{deleteConfirm}"? This action cannot be undone.
-          </Typography>
+          <Typography>Are you sure you want to delete "{deleteConfirm}"? This action cannot be undone.</Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteConfirm(null)}>
-            Cancel
-          </Button>
-          <Button
-            color="error"
-            onClick={() => deleteConfirm && handleDelete(deleteConfirm)}
-          >
-            Delete
-          </Button>
+          <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+          <Button color="error" onClick={() => deleteConfirm && handleDelete(deleteConfirm)}>Delete</Button>
         </DialogActions>
       </Dialog>
     </Container>

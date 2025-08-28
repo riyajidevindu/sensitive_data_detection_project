@@ -1,0 +1,49 @@
+body {
+  position: relative;
+  overflow-x: hidden;
+}
+
+.aurora-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.aurora-background::before,
+.aurora-background::after {
+  content: '';
+  position: absolute;
+  width: 1000px;
+  height: 1000px;
+  border-radius: 50%;
+  opacity: 0.2;
+  mix-blend-mode: screen;
+  filter: blur(100px);
+  animation: aurora-animation 20s infinite alternate;
+}
+
+.aurora-background::before {
+  background: radial-gradient(circle, #90caf9, transparent 60%);
+  top: -50%;
+  left: -50%;
+}
+
+.aurora-background::after {
+  background: radial-gradient(circle, #f48fb1, transparent 60%);
+  bottom: -50%;
+  right: -50%;
+  animation-delay: -10s;
+}
+
+@keyframes aurora-animation {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  100% {
+    transform: translate(200px, 200px) rotate(360deg);
+  }
+}

@@ -1,10 +1,13 @@
 import React from 'react';
-import { AppBar, Tabs, Tab, Container, styled, useTheme } from '@mui/material';
+import { AppBar, Tabs, Tab, Container, styled, useTheme, IconButton, Tooltip } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import HomeIcon from '@mui/icons-material/Home';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import HistoryIcon from '@mui/icons-material/History';
+import Brightness4Icon from '@mui/icons-material/Brightness4';
+import Brightness7Icon from '@mui/icons-material/Brightness7';
 import { motion } from 'framer-motion';
+import { useThemeContext } from '../contexts/ThemeContext';
 
 const StyledTab = styled(Tab)(({ theme }) => ({
   minHeight: 64,
@@ -23,6 +26,7 @@ const Navigation: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
+  const { isDarkMode, toggleTheme } = useThemeContext();
 
   const getTabValue = () => {
     switch (location.pathname) {
@@ -42,8 +46,8 @@ const Navigation: React.FC = () => {
   };
 
   return (
-    <AppBar position="sticky" color="default" elevation={1} sx={{ bgcolor: 'white' }}>
-      <Container maxWidth="lg">
+    <AppBar position="sticky" color="default" elevation={0}>
+      <Container maxWidth="lg" sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
         <Tabs
           value={getTabValue()}
           onChange={handleTabChange}
@@ -56,6 +60,11 @@ const Navigation: React.FC = () => {
           <StyledTab icon={<CloudUploadIcon />} label="Upload & Process" iconPosition="start" />
           <StyledTab icon={<HistoryIcon />} label="History" iconPosition="start" />
         </Tabs>
+        <Tooltip title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}>
+          <IconButton onClick={toggleTheme} color="inherit" sx={{ ml: 2 }}>
+            {isDarkMode ? <Brightness7Icon /> : <Brightness4Icon />}
+          </IconButton>
+        </Tooltip>
       </Container>
     </AppBar>
   );

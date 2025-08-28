@@ -3,14 +3,12 @@ import {
   Container,
   Typography,
   Grid,
-  Card,
-  CardContent,
+  Paper,
   Box,
   Chip,
   Alert,
   CircularProgress,
   Button,
-  Paper,
   useTheme,
   styled,
 } from '@mui/material';
@@ -27,16 +25,17 @@ import { motion } from 'framer-motion';
 import ApiService from '../services/api';
 import { HealthResponse, ModelInfo } from '../types/api';
 
-const AnimatedCard = motion(Card);
+const AnimatedPaper = motion(Paper);
 const AnimatedBox = motion(Box);
 
-const FeatureCard = styled(AnimatedCard)(({ theme }) => ({
+const BentoGridItem = styled(AnimatedPaper)(({ theme }) => ({
+  padding: theme.spacing(3),
+  textAlign: 'center',
   height: '100%',
   display: 'flex',
   flexDirection: 'column',
   justifyContent: 'center',
-  textAlign: 'center',
-  padding: theme.spacing(4),
+  alignItems: 'center',
   transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
   '&:hover': {
     transform: 'translateY(-10px)',
@@ -104,7 +103,7 @@ const HomePage: React.FC = () => {
   }
 
   return (
-    <motion.div initial="hidden" animate="visible" variants={containerVariants}>
+    <AnimatedBox initial="hidden" animate="visible" variants={containerVariants}>
       <Container maxWidth="lg" sx={{ py: 8 }}>
         <AnimatedBox sx={{ textAlign: 'center', mb: 8 }} variants={itemVariants}>
           <Typography
@@ -126,13 +125,13 @@ const HomePage: React.FC = () => {
         </AnimatedBox>
 
         {error && (
-          <motion.div variants={itemVariants}>
+          <AnimatedBox variants={itemVariants}>
             <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
-          </motion.div>
+          </AnimatedBox>
         )}
         
         {health && (
-          <motion.div variants={itemVariants}>
+          <AnimatedBox variants={itemVariants}>
             <Alert 
               severity={health.status === 'healthy' ? 'success' : 'warning'} 
               sx={{ mb: 4 }}
@@ -142,59 +141,60 @@ const HomePage: React.FC = () => {
             >
               API Status: <strong>{health.status}</strong> | Version: {health.version} | Model: {health.model_loaded ? 'Loaded' : 'Not Found'}
             </Alert>
-          </motion.div>
+          </AnimatedBox>
         )}
 
-        <Grid container spacing={4} sx={{ mb: 8 }}>
-          <Grid item xs={12} md={6}>
-            <FeatureCard variants={itemVariants} whileHover={{ scale: 1.05 }}>
-              <Face sx={{ fontSize: 80, color: 'primary.main', mb: 2, mx: 'auto' }} />
+        <Grid container spacing={3} sx={{ mb: 8 }}>
+          <Grid item xs={12} md={7}>
+            <BentoGridItem variants={itemVariants} whileHover={{ scale: 1.02 }}>
+              <Face sx={{ fontSize: 80, color: 'primary.main', mb: 2 }} />
               <Typography variant="h4" gutterBottom>Face Detection</Typography>
               <Typography color="text.secondary" paragraph>
                 Protect privacy by automatically detecting and blurring faces with high accuracy.
               </Typography>
               <Chip label="GDPR Compliant" color="success" variant="outlined" />
-            </FeatureCard>
+            </BentoGridItem>
           </Grid>
-          
-          <Grid item xs={12} md={6}>
-            <FeatureCard variants={itemVariants} whileHover={{ scale: 1.05 }}>
-              <DirectionsCar sx={{ fontSize: 80, color: 'primary.main', mb: 2, mx: 'auto' }} />
+          <Grid item xs={12} md={5}>
+            <BentoGridItem variants={itemVariants} whileHover={{ scale: 1.02 }}>
+              <DirectionsCar sx={{ fontSize: 80, color: 'primary.main', mb: 2 }} />
               <Typography variant="h4" gutterBottom>License Plate Detection</Typography>
               <Typography color="text.secondary" paragraph>
-                Ensure vehicle privacy by identifying and redacting license plates from images.
+                Ensure vehicle privacy by identifying and redacting license plates.
               </Typography>
               <Chip label="High Precision" color="primary" variant="outlined" />
-            </FeatureCard>
+            </BentoGridItem>
           </Grid>
         </Grid>
 
-        <motion.div variants={itemVariants}>
-          <Typography variant="h4" component="h2" sx={{ textAlign: 'center', mb: 6, fontWeight: 600 }}>
-            Why Choose Us?
-          </Typography>
-        </motion.div>
-        
-        <Grid container spacing={4} sx={{ mb: 8 }}>
-          {[
-            { icon: <Security sx={{ fontSize: 40, color: 'success.main' }} />, title: 'Privacy First', description: 'All processing is done securely with automatic file cleanup.' },
-            { icon: <Speed sx={{ fontSize: 40, color: 'warning.main' }} />, title: 'Fast Processing', description: 'ONNX-optimized models for real-time inference.' },
-            { icon: <CloudUpload sx={{ fontSize: 40, color: 'info.main' }} />, title: 'Easy to Use', description: 'Simple drag & drop interface for batch processing.' },
-          ].map((item, index) => (
-            <Grid item xs={12} md={4} key={index}>
-              <AnimatedBox variants={itemVariants} sx={{ textAlign: 'center' }}>
-                {item.icon}
-                <Typography variant="h6" gutterBottom sx={{ mt: 2, fontWeight: 600 }}>{item.title}</Typography>
-                <Typography variant="body1" color="text.secondary">{item.description}</Typography>
-              </AnimatedBox>
-            </Grid>
-          ))}
+        <Grid container spacing={3} sx={{ mb: 8 }}>
+          <Grid item xs={12} md={4}>
+            <BentoGridItem variants={itemVariants} whileHover={{ scale: 1.02 }}>
+              <Security sx={{ fontSize: 40, color: 'success.main' }} />
+              <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>Privacy First</Typography>
+              <Typography variant="body1" color="text.secondary">All processing is done securely with automatic file cleanup.</Typography>
+            </BentoGridItem>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <BentoGridItem variants={itemVariants} whileHover={{ scale: 1.02 }}>
+              <Speed sx={{ fontSize: 40, color: 'warning.main' }} />
+              <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>Fast Processing</Typography>
+              <Typography variant="body1" color="text.secondary">ONNX-optimized models for real-time inference.</Typography>
+            </BentoGridItem>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <BentoGridItem variants={itemVariants} whileHover={{ scale: 1.02 }}>
+              <CloudUpload sx={{ fontSize: 40, color: 'info.main' }} />
+              <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>Easy to Use</Typography>
+              <Typography variant="body1" color="text.secondary">Simple drag & drop interface for batch processing.</Typography>
+            </BentoGridItem>
+          </Grid>
         </Grid>
 
         {modelInfo && (
-          <motion.div variants={itemVariants}>
-            <Paper elevation={2} sx={{ p: 4, mb: 6, borderRadius: 2, background: theme.palette.grey[50] }}>
-              <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>Model Information</Typography>
+          <AnimatedBox variants={itemVariants}>
+            <Paper elevation={2} sx={{ p: 4, mb: 6, borderRadius: 2 }}>
+              <Typography variant="h5" gutterBottom>Model Information</Typography>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}><Typography><strong>Model:</strong> {modelInfo.model_name}</Typography></Grid>
                 <Grid item xs={12} sm={6}><Typography><strong>Size:</strong> {modelInfo.model_size}</Typography></Grid>
@@ -202,7 +202,7 @@ const HomePage: React.FC = () => {
                 <Grid item xs={12} sm={6}><Typography><strong>Supported Classes:</strong> {modelInfo.supported_classes.join(', ')}</Typography></Grid>
               </Grid>
             </Paper>
-          </motion.div>
+          </AnimatedBox>
         )}
 
         <AnimatedBox sx={{ textAlign: 'center' }} variants={itemVariants}>
@@ -212,14 +212,14 @@ const HomePage: React.FC = () => {
               size="large"
               startIcon={<CloudUpload />}
               onClick={() => navigate('/upload')}
-              sx={{ px: 5, py: 2, fontSize: '1.2rem', borderRadius: '50px', textTransform: 'none' }}
+              sx={{ px: 5, py: 2, fontSize: '1.2rem' }}
             >
               Start Processing Images
             </Button>
           </motion.div>
         </AnimatedBox>
       </Container>
-    </motion.div>
+    </AnimatedBox>
   );
 };
 

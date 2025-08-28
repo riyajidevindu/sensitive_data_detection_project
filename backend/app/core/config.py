@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     
     # Model Configuration
-    MODEL_PATH: str = "e:/Campus/Semester_07/Vision/sensitive_data_detection_project_v2/model/yolov8n.onnx"
+    MODEL_PATH: str = "e:/Campus/Semester_07/Vision/sensitive_data_detection_project_v2/model/best.pt"
     CONFIDENCE_THRESHOLD: float = 0.5
     IOU_THRESHOLD: float = 0.4
     

@@ -14,6 +14,9 @@ class FileHandler:
         self.output_dir = settings.OUTPUT_DIRECTORY
         self.max_file_size = settings.MAX_FILE_SIZE
         self.allowed_extensions = settings.ALLOWED_EXTENSIONS
+        # Ensure directories exist
+        os.makedirs(self.upload_dir, exist_ok=True)
+        os.makedirs(self.output_dir, exist_ok=True)
     
     def validate_file(self, filename: str, file_size: int) -> bool:
         """Validate uploaded file"""
@@ -56,6 +59,13 @@ class FileHandler:
         bgr_image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         cv2.imwrite(file_path, bgr_image)
         
+        return file_path
+
+    def save_image_to(self, image: np.ndarray, file_path: str) -> str:
+        """Save processed image to an absolute path (ensures parent dirs)."""
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        bgr_image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(file_path, bgr_image)
         return file_path
     
     def cleanup_file(self, file_path: str):

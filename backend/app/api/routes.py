@@ -85,25 +85,35 @@ async def detect_sensitive_data(
             if not processor.validate_image(image):
                 raise HTTPException(status_code=400, detail="Invalid image format")
             
+
             # Perform detection
             detections = detector.detect(image)
-            
+
+            # --- DEBUG: Save detection output with bounding boxes (no blur) ---
+            debug_dir = os.path.join(settings.OUTPUT_DIRECTORY, "debug")
+            os.makedirs(debug_dir, exist_ok=True)
+            debug_filename = handler.generate_output_filename(file.filename, suffix="_detections")
+            debug_path = os.path.join(debug_dir, debug_filename)
+            debug_image = processor.draw_detections(image, detections, draw_labels=True)
+            handler.save_image(debug_image, os.path.join(debug_dir, debug_filename))
+            # --- END DEBUG ---
+
             # Process image (apply blur if requested)
             processed_image = image.copy()
             if blur_faces or blur_plates:
                 # Temporarily override processor settings
                 original_face_blur = processor.enable_face_blur
                 original_plate_blur = processor.enable_plate_blur
-                
+
                 processor.enable_face_blur = blur_faces
                 processor.enable_plate_blur = blur_plates
-                
+
                 processed_image = processor.blur_detections(processed_image, detections)
-                
+
                 # Restore original settings
                 processor.enable_face_blur = original_face_blur
                 processor.enable_plate_blur = original_plate_blur
-            
+
             # Save processed image
             output_filename = handler.generate_output_filename(file.filename)
             output_path = handler.save_image(processed_image, output_filename)

@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from typing import List, Tuple, Dict, Any
 import logging
+import os
 from app.core.config import settings
 from app.models.schemas import Detection, BoundingBox
 
@@ -22,36 +23,56 @@ class YOLOv8Detector:
             1: "license_plate",
         }
 
+        # Runtime/session state
         self.session = None
         self.input_name = None
         self.output_names = None
         self.input_shape = None
         self.input_height = None
         self.input_width = None
+        self.use_ultralytics = False
+        self.ultra_model = None
 
         self._load_model()
     
     def _load_model(self):
         """Load the ONNX model"""
         try:
-            # Create ONNX Runtime session
-            providers = ['CPUExecutionProvider']
-            if ort.get_device() == 'GPU':
-                providers.insert(0, 'CUDAExecutionProvider')
-            
-            self.session = ort.InferenceSession(self.model_path, providers=providers)
-            
-            # Get model input/output info
-            self.input_name = self.session.get_inputs()[0].name
-            self.output_names = [output.name for output in self.session.get_outputs()]
-            self.input_shape = self.session.get_inputs()[0].shape
-            # Resolve input height/width even if dynamic or symbolic
-            self.input_height = self._resolve_dim(self.input_shape[2], default=640)
-            self.input_width = self._resolve_dim(self.input_shape[3], default=640)
-            
-            logger.info(f"Model loaded successfully from {self.model_path}")
-            logger.info(f"Input shape: {self.input_shape} -> resolved to HxW: {self.input_height}x{self.input_width}")
-            logger.info(f"Available providers: {self.session.get_providers()}")
+            ext = os.path.splitext(self.model_path)[1].lower()
+            if ext == ".pt":
+                # Use Ultralytics YOLOv8 PyTorch model
+                from ultralytics import YOLO  # local import to avoid hard dependency if unused
+                self.ultra_model = YOLO(self.model_path)
+                self.use_ultralytics = True
+                # Default inference size
+                self.input_height = 640
+                self.input_width = 640
+                # Use model's class names if available
+                try:
+                    if hasattr(self.ultra_model, 'names') and isinstance(self.ultra_model.names, (list, dict)):
+                        if isinstance(self.ultra_model.names, dict):
+                            self.class_names = {int(k): v for k, v in self.ultra_model.names.items()}
+                        else:
+                            self.class_names = {i: n for i, n in enumerate(self.ultra_model.names)}
+                except Exception:
+                    pass
+                logger.info(f"Loaded Ultralytics model from {self.model_path} with classes: {self.class_names}")
+            else:
+                # Use ONNX Runtime session
+                providers = ['CPUExecutionProvider']
+                if ort.get_device() == 'GPU':
+                    providers.insert(0, 'CUDAExecutionProvider')
+                self.session = ort.InferenceSession(self.model_path, providers=providers)
+                # Get model input/output info
+                self.input_name = self.session.get_inputs()[0].name
+                self.output_names = [output.name for output in self.session.get_outputs()]
+                self.input_shape = self.session.get_inputs()[0].shape
+                # Resolve input height/width even if dynamic or symbolic
+                self.input_height = self._resolve_dim(self.input_shape[2], default=640)
+                self.input_width = self._resolve_dim(self.input_shape[3], default=640)
+                logger.info(f"Model loaded successfully from {self.model_path}")
+                logger.info(f"Input shape: {self.input_shape} -> resolved to HxW: {self.input_height}x{self.input_width}")
+                logger.info(f"Available providers: {self.session.get_providers()}")
             
         except Exception as e:
             logger.error(f"Failed to load model: {str(e)}")
@@ -109,6 +130,34 @@ class YOLOv8Detector:
         batched = np.expand_dims(transposed, axis=0)  # Add batch dimension
 
         return batched, scale, (x_offset, y_offset)
+
+    def _convert_ultra_results(self, results) -> List[Detection]:
+        """Convert Ultralytics Results to our Detection list."""
+        detections: List[Detection] = []
+        if not results:
+            return detections
+        r = results[0]
+        if r.boxes is None or len(r.boxes) == 0:
+            return detections
+        # xyxy, conf, cls
+        xyxy = r.boxes.xyxy.cpu().numpy()
+        confs = r.boxes.conf.cpu().numpy()
+        clss = r.boxes.cls.cpu().numpy()
+        for (x1, y1, x2, y2), conf, cls_id in zip(xyxy, confs, clss):
+            if float(conf) < self.confidence_threshold:
+                continue
+            w = float(x2 - x1)
+            h = float(y2 - y1)
+            class_id = int(cls_id)
+            class_name = self.class_names.get(class_id, f"class_{class_id}")
+            detections.append(
+                Detection(
+                    class_name=class_name,
+                    confidence=float(conf),
+                    bbox=BoundingBox(x=float(x1), y=float(y1), width=w, height=h),
+                )
+            )
+        return detections
     
     def postprocess_outputs(self, outputs: List[np.ndarray], scale: float, 
                           offsets: Tuple[int, int], original_shape: Tuple[int, int]) -> List[Detection]:
@@ -200,6 +249,16 @@ class YOLOv8Detector:
     
     def detect(self, image: np.ndarray) -> List[Detection]:
         """Perform detection on an image"""
+        if self.use_ultralytics:
+            try:
+                # Ultralytics handles preprocessing internally
+                results = self.ultra_model.predict(image, imgsz=max(self.input_height, self.input_width), conf=self.confidence_threshold, verbose=False)
+                detections = self._convert_ultra_results(results)
+                return detections
+            except Exception as e:
+                logger.error(f"Detection failed (Ultralytics): {str(e)}")
+                raise RuntimeError(f"Detection failed: {str(e)}")
+
         if self.session is None:
             raise RuntimeError("Model not loaded")
         

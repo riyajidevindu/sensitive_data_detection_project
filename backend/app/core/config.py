@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     ENABLE_FACE_BLUR: bool = True
     ENABLE_PLATE_BLUR: bool = True
     BLUR_KERNEL_SIZE: int = 15
+    MIN_BLUR_KERNEL_SIZE: int = 9
+    MAX_BLUR_KERNEL_SIZE: int = 45
+    BLUR_FOCUS_EXP: float = 2.5
+    BLUR_BASE_WEIGHT: float = 0.35
     
     # Security
     SECRET_KEY: str = "your-secret-key-here-change-in-production"

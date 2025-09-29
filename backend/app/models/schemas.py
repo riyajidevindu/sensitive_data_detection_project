@@ -15,6 +15,14 @@ class Detection(BaseModel):
     confidence: float
     bbox: BoundingBox
 
+class BlurParameters(BaseModel):
+    """Runtime blur configuration used for processing"""
+    min_kernel_size: int
+    max_kernel_size: int
+    blur_focus_exp: float
+    blur_base_weight: float
+
+
 class ProcessingResult(BaseModel):
     """Result of image processing"""
     original_filename: str
@@ -25,6 +33,7 @@ class ProcessingResult(BaseModel):
     total_detections: int
     face_count: int
     plate_count: int
+    blur_parameters: BlurParameters
 
 class HealthResponse(BaseModel):
     """Health check response"""

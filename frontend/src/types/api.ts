@@ -20,6 +20,14 @@ export interface ProcessingResult {
   total_detections: number;
   face_count: number;
   plate_count: number;
+  blur_parameters: BlurParameters;
+}
+
+export interface BlurParameters {
+  min_kernel_size: number;
+  max_kernel_size: number;
+  blur_focus_exp: number;
+  blur_base_weight: number;
 }
 
 export interface HealthResponse {

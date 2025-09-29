@@ -15,6 +15,9 @@ import {
   Chip,
   IconButton,
   LinearProgress,
+  Tooltip,
+  Slider,
+  Stack,
   styled,
   useTheme,
 } from '@mui/material';
@@ -27,10 +30,11 @@ import {
   Timer,
   Delete,
   InsertDriveFile,
+  HelpOutline,
 } from '@mui/icons-material';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
-import ApiService from '../services/api';
+import ApiService, { DetectionOptions } from '../services/api';
 import { ProcessingResult } from '../types/api';
 
 const DropzonePaper = styled(Paper)(({ theme, isDragActive }: { theme: any; isDragActive: boolean }) => ({
@@ -46,6 +50,11 @@ const DropzonePaper = styled(Paper)(({ theme, isDragActive }: { theme: any; isDr
   },
 }));
 
+const DEFAULT_MIN_KERNEL = 9;
+const DEFAULT_MAX_KERNEL = 45;
+const DEFAULT_FOCUS_EXPONENT = 2.5;
+const DEFAULT_BASE_WEIGHT = 0.35;
+
 const UploadPage: React.FC = () => {
   const theme = useTheme();
   const [files, setFiles] = useState<File[]>([]);
@@ -53,6 +62,10 @@ const UploadPage: React.FC = () => {
   const [results, setResults] = useState<ProcessingResult[]>([]);
   const [blurFaces, setBlurFaces] = useState(true);
   const [blurPlates, setBlurPlates] = useState(true);
+  const [minKernel, setMinKernel] = useState(DEFAULT_MIN_KERNEL);
+  const [maxKernel, setMaxKernel] = useState(DEFAULT_MAX_KERNEL);
+  const [focusExponent, setFocusExponent] = useState(DEFAULT_FOCUS_EXPONENT);
+  const [baseWeight, setBaseWeight] = useState(DEFAULT_BASE_WEIGHT);
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
 
@@ -75,6 +88,34 @@ const UploadPage: React.FC = () => {
     setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const ensureOdd = (value: number) => {
+    const rounded = Math.round(value);
+    return rounded % 2 === 0 ? rounded + 1 : rounded;
+  };
+
+  const extractValue = (value: number | number[]): number => (Array.isArray(value) ? value[0] : value);
+
+  const handleMinKernelChange = (_: Event, value: number | number[]) => {
+    const newValue = ensureOdd(extractValue(value));
+    setMinKernel(newValue);
+    setMaxKernel(prev => (prev < newValue ? newValue : ensureOdd(prev)));
+  };
+
+  const handleMaxKernelChange = (_: Event, value: number | number[]) => {
+    const newValue = ensureOdd(extractValue(value));
+    setMaxKernel(newValue < minKernel ? minKernel : newValue);
+  };
+
+  const handleFocusExponentChange = (_: Event, value: number | number[]) => {
+    const newValue = extractValue(value);
+    setFocusExponent(Number(newValue.toFixed(2)));
+  };
+
+  const handleBaseWeightChange = (_: Event, value: number | number[]) => {
+    const newValue = extractValue(value);
+    setBaseWeight(Number(newValue.toFixed(2)));
+  };
+
   const processFiles = async () => {
     if (files.length === 0) {
       setError('Please select at least one file to process');
@@ -85,12 +126,22 @@ const UploadPage: React.FC = () => {
     setError(null);
     setUploadProgress(0);
     const newResults: ProcessingResult[] = [];
+    const sanitizedMin = ensureOdd(minKernel);
+    const sanitizedMax = Math.max(ensureOdd(maxKernel), sanitizedMin);
+    const requestOptions: DetectionOptions = {
+      blurFaces,
+      blurPlates,
+      minKernel: sanitizedMin,
+      maxKernel: sanitizedMax,
+      focusExponent,
+      baseWeight,
+    };
 
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         try {
-          const result = await ApiService.detectSensitiveData(file, blurFaces, blurPlates);
+          const result = await ApiService.detectSensitiveData(file, requestOptions);
           newResults.push(result);
           setUploadProgress(((i + 1) / files.length) * 100);
         } catch (err: any) {
@@ -162,6 +213,66 @@ const UploadPage: React.FC = () => {
                 <Typography variant="h6" gutterBottom>Processing Options</Typography>
                 <FormControlLabel control={<Switch checked={blurFaces} onChange={(e) => setBlurFaces(e.target.checked)} />} label="Blur Faces" />
                 <FormControlLabel control={<Switch checked={blurPlates} onChange={(e) => setBlurPlates(e.target.checked)} />} label="Blur License Plates" />
+                <Stack spacing={2.5} sx={{ mt: 2 }}>
+                  <Box>
+                    <Typography variant="subtitle2">Blur kernel size range</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Minimum {minKernel}px · Maximum {maxKernel}px
+                    </Typography>
+                    <Box sx={{ mt: 1 }}>
+                      <Typography variant="caption" color="text.secondary">Minimum kernel</Typography>
+                      <Slider
+                        value={minKernel}
+                        onChange={handleMinKernelChange}
+                        step={2}
+                        min={3}
+                        max={45}
+                        valueLabelDisplay="auto"
+                      />
+                    </Box>
+                    <Box sx={{ mt: 1.5 }}>
+                      <Typography variant="caption" color="text.secondary">Maximum kernel</Typography>
+                      <Slider
+                        value={maxKernel}
+                        onChange={handleMaxKernelChange}
+                        step={2}
+                        min={minKernel}
+                        max={65}
+                        valueLabelDisplay="auto"
+                      />
+                    </Box>
+                  </Box>
+                  <Box>
+                    <Typography variant="subtitle2">Blur focus exponent</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Controls how quickly blur falls off from the center ({focusExponent.toFixed(2)}).
+                    </Typography>
+                    <Slider
+                      sx={{ mt: 1 }}
+                      value={focusExponent}
+                      onChange={handleFocusExponentChange}
+                      min={0.5}
+                      max={5}
+                      step={0.1}
+                      valueLabelDisplay="auto"
+                    />
+                  </Box>
+                  <Box>
+                    <Typography variant="subtitle2">Baseline blur mix</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Ensures a minimum blur across the region ({Math.round(baseWeight * 100)}%).
+                    </Typography>
+                    <Slider
+                      sx={{ mt: 1 }}
+                      value={baseWeight}
+                      onChange={handleBaseWeightChange}
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      valueLabelDisplay="auto"
+                    />
+                  </Box>
+                </Stack>
               </Box>
 
               <Box sx={{ mt: 3 }}>
@@ -220,6 +331,11 @@ const UploadPage: React.FC = () => {
                               <Grid item><Chip icon={<DirectionsCar />} label={`${result.plate_count} Plates`} size="small" /></Grid>
                               <Grid item><Chip icon={<Timer />} label={`${result.processing_time.toFixed(2)}s`} size="small" /></Grid>
                             </Grid>
+                            <Box sx={{ mb: 2 }}>
+                              <Typography variant="body2" color="text.secondary">
+                                Blur: min {result.blur_parameters.min_kernel_size}px · max {result.blur_parameters.max_kernel_size}px · focus {result.blur_parameters.blur_focus_exp.toFixed(2)} · mix {Math.round(result.blur_parameters.blur_base_weight * 100)}%
+                              </Typography>
+                            </Box>
                             <Button
                               variant="outlined"
                               size="small"

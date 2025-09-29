@@ -31,16 +31,46 @@ apiClient.interceptors.response.use(
   }
 );
 
+export interface DetectionOptions {
+  blurFaces?: boolean;
+  blurPlates?: boolean;
+  minKernel?: number;
+  maxKernel?: number;
+  focusExponent?: number;
+  baseWeight?: number;
+}
+
 export class ApiService {
   static async detectSensitiveData(
     file: File,
-    blurFaces: boolean = true,
-    blurPlates: boolean = true
+    options: DetectionOptions = {}
   ): Promise<ProcessingResult> {
+    const {
+      blurFaces = true,
+      blurPlates = true,
+      minKernel,
+      maxKernel,
+      focusExponent,
+      baseWeight,
+    } = options;
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('blur_faces', blurFaces.toString());
     formData.append('blur_plates', blurPlates.toString());
+
+    if (minKernel !== undefined) {
+      formData.append('min_kernel_size', minKernel.toString());
+    }
+    if (maxKernel !== undefined) {
+      formData.append('max_kernel_size', maxKernel.toString());
+    }
+    if (focusExponent !== undefined) {
+      formData.append('blur_focus_exp', focusExponent.toString());
+    }
+    if (baseWeight !== undefined) {
+      formData.append('blur_base_weight', baseWeight.toString());
+    }
 
     const response: AxiosResponse<ProcessingResult> = await apiClient.post(
       '/detect',

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
+from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Form
 from fastapi.responses import JSONResponse, FileResponse
 import time
 import os
@@ -7,7 +7,13 @@ from datetime import datetime
 from typing import List
 
 from app.core.config import settings
-from app.models.schemas import ProcessingResult, HealthResponse, ModelInfo, ErrorResponse
+from app.models.schemas import (
+    ProcessingResult,
+    HealthResponse,
+    ModelInfo,
+    ErrorResponse,
+    BlurParameters,
+)
 from app.services.detector import YOLOv8Detector
 from app.services.image_processor import ImageProcessor
 from app.utils.file_handler import FileHandler
@@ -46,8 +52,12 @@ def get_file_handler():
 @router.post("/detect", response_model=ProcessingResult)
 async def detect_sensitive_data(
     file: UploadFile = File(...),
-    blur_faces: bool = True,
-    blur_plates: bool = True,
+    blur_faces: bool = Form(True),
+    blur_plates: bool = Form(True),
+    min_kernel_size: int | None = Form(None),
+    max_kernel_size: int | None = Form(None),
+    blur_focus_exp: float | None = Form(None),
+    blur_base_weight: float | None = Form(None),
     detector: YOLOv8Detector = Depends(get_detector),
     processor: ImageProcessor = Depends(get_image_processor),
     handler: FileHandler = Depends(get_file_handler)
@@ -98,6 +108,18 @@ async def detect_sensitive_data(
             handler.save_image(debug_image, os.path.join(debug_dir, debug_filename))
             # --- END DEBUG ---
 
+            # Resolve runtime blur settings from overrides
+            runtime_overrides_raw = {
+                "min_kernel_size": min_kernel_size,
+                "max_kernel_size": max_kernel_size,
+                "blur_focus_exp": blur_focus_exp,
+                "blur_base_weight": blur_base_weight,
+            }
+            runtime_overrides = {
+                key: value for key, value in runtime_overrides_raw.items() if value is not None
+            }
+            runtime_settings = processor.get_runtime_settings(runtime_overrides)
+
             # Process image (apply blur if requested)
             processed_image = image.copy()
             if blur_faces or blur_plates:
@@ -108,7 +130,11 @@ async def detect_sensitive_data(
                 processor.enable_face_blur = blur_faces
                 processor.enable_plate_blur = blur_plates
 
-                processed_image = processor.blur_detections(processed_image, detections)
+                processed_image = processor.blur_detections(
+                    processed_image,
+                    detections,
+                    runtime_settings=runtime_settings,
+                )
 
                 # Restore original settings
                 processor.enable_face_blur = original_face_blur
@@ -133,7 +159,8 @@ async def detect_sensitive_data(
                 timestamp=datetime.now(),
                 total_detections=len(detections),
                 face_count=face_count,
-                plate_count=plate_count
+                plate_count=plate_count,
+                blur_parameters=BlurParameters(**runtime_settings),
             )
             
             logger.info(f"Processed {file.filename}: {len(detections)} detections in {processing_time:.2f}s")

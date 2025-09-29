@@ -105,8 +105,15 @@ export class ApiService {
     return response.data;
   }
 
-  static getDownloadUrl(filename: string): string {
-    return `${API_BASE_URL}/api/v1/download/${filename}`;
+  static getDownloadUrl(filename: string, cacheBust?: string | number): string {
+    const base = `${API_BASE_URL}/api/v1/download/${filename}`;
+    if (cacheBust === undefined || cacheBust === null) {
+      return base;
+    }
+
+    const formatted = encodeURIComponent(String(cacheBust));
+    const separator = base.includes('?') ? '&' : '?';
+    return `${base}${separator}v=${formatted}`;
   }
 
   static getOutputImageUrl(filename: string): string {

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Container,
   Typography,
@@ -12,6 +12,7 @@ import {
   Grid,
   Card,
   CardContent,
+  CardActions,
   Chip,
   IconButton,
   LinearProgress,
@@ -31,6 +32,7 @@ import {
   Delete,
   InsertDriveFile,
   HelpOutline,
+  Autorenew,
 } from '@mui/icons-material';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -55,11 +57,21 @@ const DEFAULT_MAX_KERNEL = 45;
 const DEFAULT_FOCUS_EXPONENT = 2.5;
 const DEFAULT_BASE_WEIGHT = 0.35;
 
+interface ProcessedItem {
+  id: string;
+  originalFile: File;
+  originalPreviewUrl: string;
+  parameters: DetectionOptions;
+  result: ProcessingResult;
+  isReprocessing: boolean;
+  cacheBust: number;
+}
+
 const UploadPage: React.FC = () => {
   const theme = useTheme();
   const [files, setFiles] = useState<File[]>([]);
   const [processing, setProcessing] = useState(false);
-  const [results, setResults] = useState<ProcessingResult[]>([]);
+  const [results, setResults] = useState<ProcessedItem[]>([]);
   const [blurFaces, setBlurFaces] = useState(true);
   const [blurPlates, setBlurPlates] = useState(true);
   const [minKernel, setMinKernel] = useState(DEFAULT_MIN_KERNEL);
@@ -68,6 +80,14 @@ const UploadPage: React.FC = () => {
   const [baseWeight, setBaseWeight] = useState(DEFAULT_BASE_WEIGHT);
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const previewUrlsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    return () => {
+      previewUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+      previewUrlsRef.current = [];
+    };
+  }, []);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setFiles(prev => [...prev, ...acceptedFiles]);
@@ -116,6 +136,63 @@ const UploadPage: React.FC = () => {
     setBaseWeight(Number(newValue.toFixed(2)));
   };
 
+  const hasCustomSettings =
+    minKernel !== DEFAULT_MIN_KERNEL ||
+    maxKernel !== DEFAULT_MAX_KERNEL ||
+    Number(focusExponent.toFixed(2)) !== Number(DEFAULT_FOCUS_EXPONENT.toFixed(2)) ||
+    Number(baseWeight.toFixed(2)) !== Number(DEFAULT_BASE_WEIGHT.toFixed(2));
+
+  const resetParameters = () => {
+    setMinKernel(DEFAULT_MIN_KERNEL);
+    setMaxKernel(DEFAULT_MAX_KERNEL);
+    setFocusExponent(DEFAULT_FOCUS_EXPONENT);
+    setBaseWeight(DEFAULT_BASE_WEIGHT);
+  };
+
+  const buildRequestOptions = (): DetectionOptions => {
+    const sanitizedMin = ensureOdd(minKernel);
+    const sanitizedMax = Math.max(ensureOdd(maxKernel), sanitizedMin);
+    const sanitizedFocus = Number(focusExponent.toFixed(2));
+    const sanitizedBaseWeight = Number(baseWeight.toFixed(2));
+
+    return {
+      blurFaces,
+      blurPlates,
+      minKernel: sanitizedMin,
+      maxKernel: sanitizedMax,
+      focusExponent: sanitizedFocus,
+      baseWeight: sanitizedBaseWeight,
+    };
+  };
+
+  const reprocessImage = async (index: number) => {
+    const item = results[index];
+    if (!item) {
+      return;
+    }
+
+    const requestOptions = buildRequestOptions();
+    setError(null);
+    setResults(prev => prev.map((entry, idx) => (
+      idx === index ? { ...entry, isReprocessing: true } : entry
+    )));
+
+    try {
+      const updatedResult = await ApiService.detectSensitiveData(item.originalFile, requestOptions);
+      const cacheBust = Date.now();
+      setResults(prev => prev.map((entry, idx) => (
+        idx === index
+          ? { ...entry, result: updatedResult, parameters: requestOptions, isReprocessing: false, cacheBust }
+          : entry
+      )));
+    } catch (err: any) {
+      setError(`Failed to reprocess ${item.originalFile.name}: ${err.response?.data?.detail || err.message}`);
+      setResults(prev => prev.map((entry, idx) => (
+        idx === index ? { ...entry, isReprocessing: false } : entry
+      )));
+    }
+  };
+
   const processFiles = async () => {
     if (files.length === 0) {
       setError('Please select at least one file to process');
@@ -125,32 +202,38 @@ const UploadPage: React.FC = () => {
     setProcessing(true);
     setError(null);
     setUploadProgress(0);
-    const newResults: ProcessingResult[] = [];
-    const sanitizedMin = ensureOdd(minKernel);
-    const sanitizedMax = Math.max(ensureOdd(maxKernel), sanitizedMin);
-    const requestOptions: DetectionOptions = {
-      blurFaces,
-      blurPlates,
-      minKernel: sanitizedMin,
-      maxKernel: sanitizedMax,
-      focusExponent,
-      baseWeight,
-    };
+
+    const requestOptions = buildRequestOptions();
+    const pendingResults: ProcessedItem[] = [];
 
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         try {
+          const previewUrl = URL.createObjectURL(file);
+          previewUrlsRef.current.push(previewUrl);
+
           const result = await ApiService.detectSensitiveData(file, requestOptions);
-          newResults.push(result);
+          const processedItem: ProcessedItem = {
+            id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`,
+            originalFile: file,
+            originalPreviewUrl: previewUrl,
+            parameters: { ...requestOptions },
+            result,
+            isReprocessing: false,
+            cacheBust: Date.now(),
+          };
+          pendingResults.push(processedItem);
           setUploadProgress(((i + 1) / files.length) * 100);
         } catch (err: any) {
           setError(`Failed to process ${file.name}: ${err.response?.data?.detail || err.message}`);
           break;
         }
       }
-      
-      setResults(prev => [...newResults, ...prev]);
+
+      if (pendingResults.length > 0) {
+        setResults(prev => [...pendingResults, ...prev]);
+      }
       setFiles([]);
     } catch (err: any) {
       setError(`Processing failed: ${err.response?.data?.detail || err.message}`);
@@ -159,8 +242,8 @@ const UploadPage: React.FC = () => {
     }
   };
 
-  const downloadResult = (filename: string) => {
-    const url = ApiService.getDownloadUrl(filename);
+  const downloadResult = (filename: string, cacheBust?: number) => {
+    const url = ApiService.getDownloadUrl(filename, cacheBust);
     const link = document.createElement('a');
     link.href = url;
     link.download = filename;
@@ -215,7 +298,12 @@ const UploadPage: React.FC = () => {
                 <FormControlLabel control={<Switch checked={blurPlates} onChange={(e) => setBlurPlates(e.target.checked)} />} label="Blur License Plates" />
                 <Stack spacing={2.5} sx={{ mt: 2 }}>
                   <Box>
-                    <Typography variant="subtitle2">Blur kernel size range</Typography>
+                    <Stack direction="row" spacing={0.5} alignItems="center">
+                      <Typography variant="subtitle2">Blur kernel size range</Typography>
+                      <Tooltip title="Controls the size of the area blurred for each detection. Larger values produce stronger blur but may affect more background.">
+                        <HelpOutline fontSize="small" color="action" sx={{ cursor: 'help' }} />
+                      </Tooltip>
+                    </Stack>
                     <Typography variant="body2" color="text.secondary">
                       Minimum {minKernel}px · Maximum {maxKernel}px
                     </Typography>
@@ -243,7 +331,12 @@ const UploadPage: React.FC = () => {
                     </Box>
                   </Box>
                   <Box>
-                    <Typography variant="subtitle2">Blur focus exponent</Typography>
+                    <Stack direction="row" spacing={0.5} alignItems="center">
+                      <Typography variant="subtitle2">Blur focus exponent</Typography>
+                      <Tooltip title="Higher values keep the center heavily blurred while tapering more quickly toward the box edges.">
+                        <HelpOutline fontSize="small" color="action" sx={{ cursor: 'help' }} />
+                      </Tooltip>
+                    </Stack>
                     <Typography variant="body2" color="text.secondary">
                       Controls how quickly blur falls off from the center ({focusExponent.toFixed(2)}).
                     </Typography>
@@ -258,7 +351,12 @@ const UploadPage: React.FC = () => {
                     />
                   </Box>
                   <Box>
-                    <Typography variant="subtitle2">Baseline blur mix</Typography>
+                    <Stack direction="row" spacing={0.5} alignItems="center">
+                      <Typography variant="subtitle2">Baseline blur mix</Typography>
+                      <Tooltip title="Adjusts the minimum amount of blur retained across the region. Higher percentages keep edges more blurred.">
+                        <HelpOutline fontSize="small" color="action" sx={{ cursor: 'help' }} />
+                      </Tooltip>
+                    </Stack>
                     <Typography variant="body2" color="text.secondary">
                       Ensures a minimum blur across the region ({Math.round(baseWeight * 100)}%).
                     </Typography>
@@ -273,6 +371,16 @@ const UploadPage: React.FC = () => {
                     />
                   </Box>
                 </Stack>
+                <Box sx={{ mt: 2, textAlign: 'right' }}>
+                  <Button
+                    variant="text"
+                    size="small"
+                    onClick={resetParameters}
+                    disabled={!hasCustomSettings}
+                  >
+                    Reset to defaults
+                  </Button>
+                </Box>
               </Box>
 
               <Box sx={{ mt: 3 }}>
@@ -321,34 +429,69 @@ const UploadPage: React.FC = () => {
                   </Box>
                 ) : (
                   <AnimatePresence>
-                    {results.map((result, index) => (
-                      <motion.div key={result.processed_filename + index} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: index * 0.1 }}>
-                        <Card sx={{ mb: 2, borderRadius: 2 }}>
-                          <CardContent>
-                            <Typography variant="h6" component="div" sx={{ mb: 2 }}>{result.original_filename}</Typography>
-                            <Grid container spacing={1} sx={{ mb: 2 }}>
-                              <Grid item><Chip icon={<Face />} label={`${result.face_count} Faces`} size="small" /></Grid>
-                              <Grid item><Chip icon={<DirectionsCar />} label={`${result.plate_count} Plates`} size="small" /></Grid>
-                              <Grid item><Chip icon={<Timer />} label={`${result.processing_time.toFixed(2)}s`} size="small" /></Grid>
-                            </Grid>
-                            <Box sx={{ mb: 2 }}>
-                              <Typography variant="body2" color="text.secondary">
-                                Blur: min {result.blur_parameters.min_kernel_size}px · max {result.blur_parameters.max_kernel_size}px · focus {result.blur_parameters.blur_focus_exp.toFixed(2)} · mix {Math.round(result.blur_parameters.blur_base_weight * 100)}%
-                              </Typography>
-                            </Box>
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              startIcon={<Download />}
-                              onClick={() => downloadResult(result.processed_filename)}
-                              fullWidth
-                            >
-                              Download Processed Image
-                            </Button>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    ))}
+                    {results.map((item, index) => {
+                      const { result } = item;
+                      const processedImageUrl = ApiService.getDownloadUrl(result.processed_filename, item.cacheBust);
+
+                      return (
+                        <motion.div key={item.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: index * 0.1 }}>
+                          <Card sx={{ mb: 2, borderRadius: 2 }}>
+                            <CardContent>
+                              <Typography variant="h6" component="div" sx={{ mb: 2 }}>{result.original_filename}</Typography>
+                              <Grid container spacing={1} sx={{ mb: 2 }}>
+                                <Grid item><Chip icon={<Face />} label={`${result.face_count} Faces`} size="small" /></Grid>
+                                <Grid item><Chip icon={<DirectionsCar />} label={`${result.plate_count} Plates`} size="small" /></Grid>
+                                <Grid item><Chip icon={<Timer />} label={`${result.processing_time.toFixed(2)}s`} size="small" /></Grid>
+                              </Grid>
+                              <Grid container spacing={2} sx={{ mb: 2 }}>
+                                <Grid item xs={12} md={6}>
+                                  <Typography variant="subtitle2" gutterBottom>Original Image</Typography>
+                                  <Box
+                                    component="img"
+                                    src={item.originalPreviewUrl}
+                                    alt={`Original preview for ${result.original_filename}`}
+                                    sx={{ width: '100%', borderRadius: 2, maxHeight: 260, objectFit: 'cover', border: `${theme.palette.divider} 1px solid` }}
+                                  />
+                                </Grid>
+                                <Grid item xs={12} md={6}>
+                                  <Typography variant="subtitle2" gutterBottom>Processed Image</Typography>
+                                  <Box
+                                    component="img"
+                                    src={processedImageUrl}
+                                    alt={`Processed preview for ${result.original_filename}`}
+                                    sx={{ width: '100%', borderRadius: 2, maxHeight: 260, objectFit: 'cover', border: `${theme.palette.divider} 1px solid` }}
+                                  />
+                                </Grid>
+                              </Grid>
+                              <Box sx={{ mb: 2 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                  Blur: min {result.blur_parameters.min_kernel_size}px · max {result.blur_parameters.max_kernel_size}px · focus {result.blur_parameters.blur_focus_exp.toFixed(2)} · mix {Math.round(result.blur_parameters.blur_base_weight * 100)}%
+                                </Typography>
+                              </Box>
+                            </CardContent>
+                            <CardActions sx={{ px: 3, pb: 3 }}>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                startIcon={item.isReprocessing ? <CircularProgress size={16} color="inherit" /> : <Autorenew />}
+                                onClick={() => reprocessImage(index)}
+                                disabled={item.isReprocessing}
+                              >
+                                {item.isReprocessing ? 'Reprocessing...' : 'Reprocess with current settings'}
+                              </Button>
+                              <Button
+                                variant="contained"
+                                size="small"
+                                startIcon={<Download />}
+                                onClick={() => downloadResult(result.processed_filename, item.cacheBust)}
+                              >
+                                Download Processed Image
+                              </Button>
+                            </CardActions>
+                          </Card>
+                        </motion.div>
+                      );
+                    })}
                   </AnimatePresence>
                 )}
               </Box>

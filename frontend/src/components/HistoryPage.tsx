@@ -26,7 +26,6 @@ import {
   Visibility,
   Close,
   Image as ImageIcon,
-  Info,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import ApiService from '../services/api';

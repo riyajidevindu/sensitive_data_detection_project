@@ -447,20 +447,58 @@ const UploadPage: React.FC = () => {
                                 <Grid item xs={12} md={6}>
                                   <Typography variant="subtitle2" gutterBottom>Original Image</Typography>
                                   <Box
-                                    component="img"
-                                    src={item.originalPreviewUrl}
-                                    alt={`Original preview for ${result.original_filename}`}
-                                    sx={{ width: '100%', borderRadius: 2, maxHeight: 260, objectFit: 'cover', border: `${theme.palette.divider} 1px solid` }}
-                                  />
+                                    sx={{
+                                      borderRadius: 2,
+                                      border: `1px solid ${theme.palette.divider}`,
+                                      backgroundColor: theme.palette.background.default,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      p: 1,
+                                    }}
+                                  >
+                                    <Box
+                                      component="img"
+                                      src={item.originalPreviewUrl}
+                                      alt={`Original preview for ${result.original_filename}`}
+                                      sx={{
+                                        width: '100%',
+                                        height: 'auto',
+                                        maxHeight: { xs: 320, sm: 380, md: 460 },
+                                        objectFit: 'contain',
+                                        borderRadius: 1,
+                                        display: 'block',
+                                      }}
+                                    />
+                                  </Box>
                                 </Grid>
                                 <Grid item xs={12} md={6}>
                                   <Typography variant="subtitle2" gutterBottom>Processed Image</Typography>
                                   <Box
-                                    component="img"
-                                    src={processedImageUrl}
-                                    alt={`Processed preview for ${result.original_filename}`}
-                                    sx={{ width: '100%', borderRadius: 2, maxHeight: 260, objectFit: 'cover', border: `${theme.palette.divider} 1px solid` }}
-                                  />
+                                    sx={{
+                                      borderRadius: 2,
+                                      border: `1px solid ${theme.palette.divider}`,
+                                      backgroundColor: theme.palette.background.default,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      p: 1,
+                                    }}
+                                  >
+                                    <Box
+                                      component="img"
+                                      src={processedImageUrl}
+                                      alt={`Processed preview for ${result.original_filename}`}
+                                      sx={{
+                                        width: '100%',
+                                        height: 'auto',
+                                        maxHeight: { xs: 320, sm: 380, md: 460 },
+                                        objectFit: 'contain',
+                                        borderRadius: 1,
+                                        display: 'block',
+                                      }}
+                                    />
+                                  </Box>
                                 </Grid>
                               </Grid>
                               <Box sx={{ mb: 2 }}>

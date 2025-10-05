@@ -119,6 +119,57 @@ export class ApiService {
   static getOutputImageUrl(filename: string): string {
     return `${API_BASE_URL}/outputs/${filename}`;
   }
+
+  // Selective Blur API methods
+  static async uploadReferenceFace(file: File): Promise<{ message: string; encoding_shape: number[]; filename: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await apiClient.post('/selective-blur/reference', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    return response.data;
+  }
+
+  static async applySelectiveBlur(
+    file: File,
+    tolerance: number = 0.75,
+    blurKernel: number = 51
+  ): Promise<ProcessingResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('tolerance', tolerance.toString());
+    formData.append('blur_kernel', blurKernel.toString());
+
+    const response: AxiosResponse<ProcessingResult> = await apiClient.post(
+      '/selective-blur/selective-blur',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+
+    return response.data;
+  }
+
+  static async getReferenceStatus(): Promise<{ 
+    has_reference: boolean; 
+    uploaded_at?: number; 
+    encoding_file_size?: number; 
+  }> {
+    const response = await apiClient.get('/selective-blur/reference/status');
+    return response.data;
+  }
+
+  static async clearReferenceFace(): Promise<{ message: string }> {
+    const response = await apiClient.delete('/selective-blur/reference');
+    return response.data;
+  }
 }
 
 export default ApiService;

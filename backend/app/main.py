@@ -39,6 +39,17 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 if os.path.exists(settings.OUTPUT_DIRECTORY):
     app.mount("/outputs", StaticFiles(directory=settings.OUTPUT_DIRECTORY), name="outputs")
 
+# Optionally serve built frontend (multi-stage fullstack image) if directory exists
+FRONTEND_BUILD_DIR = os.getenv("FRONTEND_BUILD_DIR", "frontend_build")
+SERVE_FRONTEND = os.getenv("SERVE_FRONTEND", "false").lower() in {"1", "true", "yes"}
+
+if SERVE_FRONTEND and os.path.isdir(FRONTEND_BUILD_DIR):
+    # Mount at root; API still served under /api/v1
+    app.mount("/", StaticFiles(directory=FRONTEND_BUILD_DIR, html=True), name="frontend")
+    logger.info(f"Mounted frontend build from '{FRONTEND_BUILD_DIR}' at '/'")
+else:
+    logger.info("Frontend build directory not served (SERVE_FRONTEND disabled or directory missing)")
+
 
 # Background cleanup task
 cleanup_task = None

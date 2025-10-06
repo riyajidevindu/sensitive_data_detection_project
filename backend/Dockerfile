@@ -3,6 +3,10 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    APP_MODULE=app.main:app
+
 # Install system dependencies for OpenCV and other libraries
 RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
@@ -19,7 +23,7 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 # Install Python dependencies with increased timeout and in stages
-# Set pip timeout to 300 seconds (5 minutes) for large downloads
+# NOTE: Heavy libs are grouped to optimize layers & to reduce chance of partial failures.
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --default-timeout=300 --no-cache-dir \
     fastapi==0.104.1 \
@@ -40,14 +44,18 @@ RUN pip install --no-cache-dir --upgrade pip && \
     torch torchvision && \
     pip install --default-timeout=300 --no-cache-dir ultralytics==8.3.0
 
-# Copy application code
-COPY . .
+# Copy application code (expect build context root at repo root so model/ can be copied)
+# If you build with context `.` from repo root this will bring in backend code under backend/.
+COPY backend/app ./app
+COPY backend/uploads ./uploads
+COPY backend/requirements.txt ./requirements.txt
+COPY model ./model
 
-# Create necessary directories
-RUN mkdir -p uploads outputs uploads/reference_encodings
+# Create necessary directories (idempotent)
+RUN mkdir -p uploads outputs uploads/reference_encodings model
 
-# Expose port
+# Expose default port (Cloud Run injects PORT env at runtime)
 EXPOSE 8000
 
-# Command to run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Production command: respect Cloud Run's PORT if provided; no --reload in production
+CMD ["sh", "-c", "uvicorn $APP_MODULE --host 0.0.0.0 --port ${PORT:-8000}"]

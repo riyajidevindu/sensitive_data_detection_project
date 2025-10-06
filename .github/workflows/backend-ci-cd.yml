@@ -1,0 +1,153 @@
+name: Backend CI & Deploy (Cloud Run)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'model/**'
+      - '.github/workflows/backend-ci-cd.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'model/**'
+
+env:
+  IMAGE_NAME: sensitive-data-backend
+  DOCKERHUB_ORG: ${{ secrets.DOCKERHUB_ORG }}
+  REGION: ${{ secrets.GCP_REGION }}
+  SERVICE: sensitive-data-backend
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+
+jobs:
+  build-test-push:
+    name: Build, Test & Push Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+
+      - name: Install test dependencies
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run tests
+        working-directory: backend
+        run: |
+          pytest -q || (echo "Tests failed" && exit 1)
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+            # Personal Access Token / Password
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set image tag
+        id: meta
+        run: |
+          SHORT_SHA=${GITHUB_SHA::7}
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="${SHORT_SHA}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Build & Push image
+        run: |
+          IMAGE_TAG=${{ steps.meta.outputs.tag }}
+          docker build -t $DOCKERHUB_ORG/$IMAGE_NAME:$IMAGE_TAG \
+            -f backend/Dockerfile .
+          docker push $DOCKERHUB_ORG/$IMAGE_NAME:$IMAGE_TAG
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            docker tag $DOCKERHUB_ORG/$IMAGE_NAME:$IMAGE_TAG $DOCKERHUB_ORG/$IMAGE_NAME:latest
+            docker push $DOCKERHUB_ORG/$IMAGE_NAME:latest
+          fi
+
+      - name: Security scan (Trivy)
+        uses: aquasecurity/trivy-action@0.22.0
+        with:
+          image-ref: ${{ env.DOCKERHUB_ORG }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '0'
+
+      - name: Generate SBOM (Trivy CycloneDX)
+        uses: aquasecurity/trivy-action@0.22.0
+        with:
+          image-ref: ${{ env.DOCKERHUB_ORG }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }}
+          format: 'cyclonedx'
+          output: 'sbom-backend.json'
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-sbom
+          path: sbom-backend.json
+
+      - name: Upload artifact (image tag)
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-image-tag
+          path: |
+            backend
+          retention-days: 1
+
+  deploy:
+    name: Deploy to Cloud Run
+    needs: build-test-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Derive image tag (latest commit)
+        id: tag
+        run: |
+          SHORT_SHA=${GITHUB_SHA::7}
+          echo "value=$SHORT_SHA" >> $GITHUB_OUTPUT
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Deploy to Cloud Run (immutable tag)
+        run: |
+          TAG=${{ steps.tag.outputs.value }}
+          gcloud run deploy $SERVICE \
+            --image $DOCKERHUB_ORG/$IMAGE_NAME:$TAG \
+            --region $REGION \
+            --platform managed \
+            --allow-unauthenticated \
+            --max-instances=3 \
+            --cpu=2 --memory=2Gi \
+            --set-env-vars=PYTHONUNBUFFERED=1
+
+      - name: Output Service URL
+        run: |
+          gcloud run services describe $SERVICE --region $REGION --format='value(status.url)'

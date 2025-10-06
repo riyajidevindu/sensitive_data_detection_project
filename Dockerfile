@@ -47,7 +47,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Copy backend code & model assets (after deps to leverage cache)
 COPY backend/app ./app
-COPY backend/uploads ./uploads
+# Create runtime directories explicitly instead of copying possibly empty local dirs
+RUN mkdir -p uploads
 COPY model ./model
 
 # Optional: sanity check model presence (non-fatal warning)

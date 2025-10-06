@@ -8,9 +8,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - MODEL_PATH=/app/model/yolov8n.onnx
+      - MODEL_PATH=/app/model/best.pt
       - UPLOAD_DIRECTORY=/app/uploads
       - OUTPUT_DIRECTORY=/app/outputs
+      - ENABLE_FACE_BLUR=true
+      - ENABLE_PLATE_BLUR=true
     volumes:
       - ./model:/app/model:ro
       - ./uploads:/app/uploads
@@ -31,7 +33,8 @@ services:
     environment:
       - REACT_APP_API_URL=http://localhost:8000
     depends_on:
-      - backend
+      backend:
+        condition: service_started
     restart: unless-stopped
 
 volumes:

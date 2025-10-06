@@ -41,12 +41,46 @@ A computer vision application for detecting sensitive data in images, including 
 
 ## Quick Start
 
-### Prerequisites
-- Python 3.9+
-- Node.js 16+
-- Docker (optional)
+### Method 1: Using Docker (Recommended - No Library Issues! 🐳)
 
-### Setup Environment
+This is the easiest and most reliable method, especially if you're having Python library compatibility issues.
+
+**Prerequisites:**
+- Docker Desktop installed ([Download here](https://www.docker.com/products/docker-desktop))
+
+**Steps:**
+
+1. **Clone the repository**
+2. **Run the start script:**
+
+**Windows:**
+```bash
+docker-start.bat
+```
+
+**Linux/Mac:**
+```bash
+docker-compose up --build
+```
+
+3. **Access the application:**
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API Documentation: http://localhost:8000/docs
+
+**That's it!** No Python environment setup, no dependency conflicts! 🎉
+
+See [DOCKER_GUIDE.md](DOCKER_GUIDE.md) for detailed Docker instructions.
+
+---
+
+### Method 2: Manual Setup (For Development)
+
+**Prerequisites:**
+- Python 3.11+ (3.13 may have compatibility issues)
+- Node.js 16+
+
+**Setup Environment:**
 
 1. **Create Python virtual environment:**
 ```bash

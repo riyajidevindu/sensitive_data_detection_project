@@ -396,9 +396,9 @@ const HistoryPage: React.FC = () => {
   const handleCopyShareLink = async () => {
     if (selectedFiles.length === 0) return;
     
-    // Generate shareable links (in production, this would be actual share URLs)
+    // Generate shareable links with session support
     const links = selectedFiles
-      .map(filename => `${window.location.origin}/outputs/${filename}`)
+      .map(filename => `${window.location.origin}${ApiService.getOutputImageUrl(filename)}`)
       .join('\n');
     
     try {

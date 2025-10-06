@@ -34,6 +34,7 @@ class ProcessingResult(BaseModel):
     face_count: int
     plate_count: int
     blur_parameters: BlurParameters
+    session_id: Optional[str] = None  # Session ID for user isolation
 
 class HealthResponse(BaseModel):
     """Health check response"""

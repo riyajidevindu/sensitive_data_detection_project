@@ -7,13 +7,31 @@ import numpy as np
 from app.core.config import settings
 
 class FileHandler:
-    """Handle file operations for image processing"""
+    """Handle file operations for image processing with session support"""
     
-    def __init__(self):
-        self.upload_dir = settings.UPLOAD_DIRECTORY
-        self.output_dir = settings.OUTPUT_DIRECTORY
+    def __init__(self, session_id: Optional[str] = None):
+        """
+        Initialize file handler with optional session isolation
+        
+        Args:
+            session_id: Optional session ID for user-specific folders
+        """
+        self.session_id = session_id
+        self.base_upload_dir = settings.UPLOAD_DIRECTORY
+        self.base_output_dir = settings.OUTPUT_DIRECTORY
+        
+        # Set session-specific directories if session_id provided
+        if session_id:
+            self.upload_dir = os.path.join(self.base_upload_dir, session_id)
+            self.output_dir = os.path.join(self.base_output_dir, session_id)
+        else:
+            # Fallback to base directories (for backward compatibility)
+            self.upload_dir = self.base_upload_dir
+            self.output_dir = self.base_output_dir
+        
         self.max_file_size = settings.MAX_FILE_SIZE
         self.allowed_extensions = settings.ALLOWED_EXTENSIONS
+        
         # Ensure directories exist
         os.makedirs(self.upload_dir, exist_ok=True)
         os.makedirs(self.output_dir, exist_ok=True)

@@ -24,7 +24,7 @@ async def upload_reference_face(
     file: UploadFile = File(...),
     handler: FileHandler = Depends(get_file_handler),
 ) -> dict:
-    """Upload a reference face image for selective blurring."""
+    """Upload a reference face image for selective blurring (session-specific)."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
 
@@ -48,19 +48,25 @@ async def upload_reference_face(
         processor = FaceRecognitionBlur()
         encoding = processor.load_reference_image(temp_path)
         
-        # Save the encoding to a persistent location
-        encoding_dir = Path(settings.UPLOAD_DIRECTORY) / "reference_encodings"
+        # Save the encoding to a session-specific location
+        if handler.session_id:
+            encoding_dir = Path(handler.upload_dir) / "reference_encodings"
+        else:
+            # Fallback to root directory for backward compatibility
+            encoding_dir = Path(settings.UPLOAD_DIRECTORY) / "reference_encodings"
+        
         encoding_dir.mkdir(exist_ok=True, parents=True)
         encoding_path = encoding_dir / "current_reference.npy"
         
         processor.save_reference_encoding(encoding_path)
         
-        logger.info(f"Successfully stored reference face encoding from {file.filename}")
+        logger.info(f"Successfully stored reference face encoding from {file.filename} (Session: {handler.session_id})")
         
         return {
             "message": "Reference face uploaded successfully",
             "encoding_shape": encoding.shape,
             "filename": file.filename,
+            "session_id": handler.session_id,
         }
 
     except FaceRecognitionBlurError as e:
@@ -98,8 +104,12 @@ async def selective_blur_image(
             ),
         )
 
-    # Check if reference encoding exists
-    encoding_path = Path(settings.UPLOAD_DIRECTORY) / "reference_encodings" / "current_reference.npy"
+    # Check if reference encoding exists (session-specific)
+    if handler.session_id:
+        encoding_path = Path(handler.upload_dir) / "reference_encodings" / "current_reference.npy"
+    else:
+        encoding_path = Path(settings.UPLOAD_DIRECTORY) / "reference_encodings" / "current_reference.npy"
+    
     if not encoding_path.exists():
         raise HTTPException(
             status_code=400,
@@ -120,7 +130,7 @@ async def selective_blur_image(
         
         # Generate output filename
         output_filename = handler.generate_output_filename(file.filename, "_selective_blur")
-        output_path = os.path.join(settings.OUTPUT_DIRECTORY, output_filename)
+        output_path = os.path.join(handler.output_dir, output_filename)
         
         # Apply selective blurring and get face statistics
         result_stats = processor.selective_blur_image(
@@ -154,6 +164,7 @@ async def selective_blur_image(
                 blur_focus_exp=1.0,
                 blur_base_weight=1.0,
             ),
+            session_id=handler.session_id,  # Include session ID
         )
 
     except FaceRecognitionBlurError as e:
@@ -169,9 +180,12 @@ async def selective_blur_image(
 
 
 @router.get("/reference/status")
-async def get_reference_status() -> dict:
-    """Check if a reference face encoding is available."""
-    encoding_path = Path(settings.UPLOAD_DIRECTORY) / "reference_encodings" / "current_reference.npy"
+async def get_reference_status(handler: FileHandler = Depends(get_file_handler)) -> dict:
+    """Check if a reference face encoding is available for current session."""
+    if handler.session_id:
+        encoding_path = Path(handler.upload_dir) / "reference_encodings" / "current_reference.npy"
+    else:
+        encoding_path = Path(settings.UPLOAD_DIRECTORY) / "reference_encodings" / "current_reference.npy"
     
     if encoding_path.exists():
         stats = encoding_path.stat()
@@ -179,19 +193,29 @@ async def get_reference_status() -> dict:
             "has_reference": True,
             "uploaded_at": stats.st_mtime,
             "encoding_file_size": stats.st_size,
+            "session_id": handler.session_id,
         }
     else:
-        return {"has_reference": False}
+        return {
+            "has_reference": False,
+            "session_id": handler.session_id,
+        }
 
 
 @router.delete("/reference")
-async def clear_reference_face() -> dict:
-    """Remove the current reference face encoding."""
-    encoding_path = Path(settings.UPLOAD_DIRECTORY) / "reference_encodings" / "current_reference.npy"
+async def clear_reference_face(handler: FileHandler = Depends(get_file_handler)) -> dict:
+    """Remove the current reference face encoding for current session."""
+    if handler.session_id:
+        encoding_path = Path(handler.upload_dir) / "reference_encodings" / "current_reference.npy"
+    else:
+        encoding_path = Path(settings.UPLOAD_DIRECTORY) / "reference_encodings" / "current_reference.npy"
     
     if encoding_path.exists():
         encoding_path.unlink()
-        logger.info("Reference face encoding cleared")
-        return {"message": "Reference face encoding cleared successfully"}
+        logger.info(f"Cleared reference encoding (Session: {handler.session_id})")
+        return {
+            "message": "Reference face encoding cleared successfully",
+            "session_id": handler.session_id,
+        }
     else:
-        return {"message": "No reference face encoding found"}
+        raise HTTPException(status_code=404, detail="No reference face found")

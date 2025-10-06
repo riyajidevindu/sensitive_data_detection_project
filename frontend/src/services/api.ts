@@ -1,5 +1,6 @@
 import axios, { AxiosResponse } from 'axios';
-import { ProcessingResult, HealthResponse, ModelInfo, FilesListResponse } from '../types/api';
+import { ProcessingResult, HealthResponse, ModelInfo, FilesListResponse, SessionInfo, SessionCreateResponse } from '../types/api';
+import { SessionService } from './sessionService';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -8,10 +9,17 @@ const apiClient = axios.create({
   timeout: 60000, // 60 seconds timeout for file uploads
 });
 
-// Add request interceptor for logging
+// Add request interceptor for logging and session management
 apiClient.interceptors.request.use(
   (config) => {
     console.log(`Making ${config.method?.toUpperCase()} request to:`, config.url);
+    
+    // Add session ID to headers if available
+    const sessionId = SessionService.getSessionId();
+    if (sessionId) {
+      config.headers['X-Session-ID'] = sessionId;
+    }
+    
     return config;
   },
   (error) => {
@@ -20,12 +28,21 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Add response interceptor for error handling
+// Add response interceptor for error handling and session management
 apiClient.interceptors.response.use(
   (response) => {
+    // Store session ID from response if present
+    if (response.data?.session_id) {
+      SessionService.setSessionId(response.data.session_id);
+    }
     return response;
   },
   (error) => {
+    // Handle session expiration
+    if (error.response?.status === 401 && error.response?.data?.detail?.includes('session')) {
+      console.warn('Session expired or invalid, clearing local session');
+      SessionService.clearSession();
+    }
     console.error('Response error:', error.response?.data || error.message);
     return Promise.reject(error);
   }
@@ -106,17 +123,29 @@ export class ApiService {
   }
 
   static getDownloadUrl(filename: string, cacheBust?: string | number): string {
+    const sessionId = SessionService.getSessionId();
     const base = `${API_BASE_URL}/api/v1/download/${filename}`;
-    if (cacheBust === undefined || cacheBust === null) {
-      return base;
+    
+    // Build query params
+    const params = new URLSearchParams();
+    if (sessionId) {
+      params.append('session_id', sessionId);
     }
-
-    const formatted = encodeURIComponent(String(cacheBust));
-    const separator = base.includes('?') ? '&' : '?';
-    return `${base}${separator}v=${formatted}`;
+    if (cacheBust !== undefined && cacheBust !== null) {
+      params.append('v', String(cacheBust));
+    }
+    
+    const queryString = params.toString();
+    return queryString ? `${base}?${queryString}` : base;
   }
 
   static getOutputImageUrl(filename: string): string {
+    // Use download endpoint with session ID as query parameter
+    const sessionId = SessionService.getSessionId();
+    if (sessionId) {
+      return `${API_BASE_URL}/api/v1/download/${filename}?session_id=${sessionId}`;
+    }
+    // Fallback to direct access (backward compatibility)
     return `${API_BASE_URL}/outputs/${filename}`;
   }
 
@@ -169,6 +198,50 @@ export class ApiService {
   static async clearReferenceFace(): Promise<{ message: string }> {
     const response = await apiClient.delete('/selective-blur/reference');
     return response.data;
+  }
+
+  // Session Management API methods
+  static async createSession(): Promise<SessionCreateResponse> {
+    const response: AxiosResponse<SessionCreateResponse> = await apiClient.post('/session/create');
+    // Store the session ID automatically
+    if (response.data.session_id) {
+      SessionService.setSessionId(response.data.session_id);
+    }
+    return response.data;
+  }
+
+  static async getSessionInfo(): Promise<SessionInfo> {
+    const response: AxiosResponse<SessionInfo> = await apiClient.get('/session/info');
+    return response.data;
+  }
+
+  static async deleteSession(): Promise<{ message: string; session_id: string }> {
+    const response = await apiClient.delete('/session/delete');
+    // Clear local session storage
+    SessionService.clearSession();
+    return response.data;
+  }
+
+  /**
+   * Ensure user has a valid session, create if needed
+   */
+  static async ensureSession(): Promise<string> {
+    const existingSession = SessionService.getSessionId();
+    
+    if (existingSession) {
+      try {
+        // Validate existing session
+        await this.getSessionInfo();
+        return existingSession;
+      } catch (error) {
+        console.warn('Existing session invalid, creating new one');
+        SessionService.clearSession();
+      }
+    }
+    
+    // Create new session
+    const response = await this.createSession();
+    return response.session_id;
   }
 }
 

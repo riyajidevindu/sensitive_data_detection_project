@@ -150,10 +150,11 @@ async def detect_sensitive_data(
         processing_time = time.time() - start_time
 
         logger.info(
-            "Processed %s: %s detections in %.2fs",
+            "Processed %s: %s detections in %.2fs (Session: %s)",
             upload.filename,
             len(detections),
             processing_time,
+            handler.session_id,
         )
 
         return ProcessingResult(
@@ -166,6 +167,7 @@ async def detect_sensitive_data(
             face_count=face_count,
             plate_count=plate_count,
             blur_parameters=BlurParameters(**runtime_settings),
+            session_id=handler.session_id,  # Include session ID in response
         )
     except HTTPException:
         raise

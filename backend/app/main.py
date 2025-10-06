@@ -4,9 +4,11 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import os
 import uvicorn
+import asyncio
 from app.core.config import settings
 from app.api.routes import router as api_router
 from app.core.logging_config import setup_logging
+from app.core.session_manager import get_session_manager
 import logging
 
 # Setup logging
@@ -37,25 +39,57 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 if os.path.exists(settings.OUTPUT_DIRECTORY):
     app.mount("/outputs", StaticFiles(directory=settings.OUTPUT_DIRECTORY), name="outputs")
 
+
+# Background cleanup task
+cleanup_task = None
+
+
+async def cleanup_sessions_periodically():
+    """Background task to cleanup expired sessions"""
+    while True:
+        try:
+            await asyncio.sleep(settings.SESSION_CLEANUP_INTERVAL_MINUTES * 60)
+            session_manager = get_session_manager()
+            cleaned = session_manager.cleanup_expired_sessions(
+                settings.UPLOAD_DIRECTORY,
+                settings.OUTPUT_DIRECTORY
+            )
+            if cleaned > 0:
+                logger.info(f"Background cleanup: Removed {cleaned} expired session(s)")
+        except Exception as e:
+            logger.error(f"Error in session cleanup task: {e}")
+
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize application on startup"""
+    global cleanup_task
     logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
     
     # Create necessary directories
     os.makedirs(settings.UPLOAD_DIRECTORY, exist_ok=True)
     os.makedirs(settings.OUTPUT_DIRECTORY, exist_ok=True)
+    os.makedirs(settings.SESSION_DIRECTORY, exist_ok=True)
     
     # Verify model exists
     if not os.path.exists(settings.MODEL_PATH):
         logger.error(f"Model file not found at {settings.MODEL_PATH}")
         raise RuntimeError(f"Model file not found at {settings.MODEL_PATH}")
     
+    # Start background cleanup task
+    cleanup_task = asyncio.create_task(cleanup_sessions_periodically())
+    logger.info(f"Started session cleanup task (interval: {settings.SESSION_CLEANUP_INTERVAL_MINUTES} min)")
+    
     logger.info("Application startup complete")
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Clean up on application shutdown"""
+    global cleanup_task
+    if cleanup_task:
+        cleanup_task.cancel()
+        logger.info("Stopped session cleanup task")
     logger.info("Application shutting down")
 
 @app.get("/")

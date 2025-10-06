@@ -21,6 +21,7 @@ export interface ProcessingResult {
   face_count: number;
   plate_count: number;
   blur_parameters: BlurParameters;
+  session_id?: string;
 }
 
 export interface BlurParameters {
@@ -60,4 +61,20 @@ export interface FileInfo {
 export interface FilesListResponse {
   files: FileInfo[];
   total: number;
+  session_id?: string;
+}
+
+export interface SessionInfo {
+  session_id: string;
+  created_at: string;
+  last_accessed?: string;
+  file_count?: number;
+  timeout_hours?: number;
+}
+
+export interface SessionCreateResponse {
+  session_id: string;
+  created_at: string;
+  timeout_hours: number;
+  message: string;
 }

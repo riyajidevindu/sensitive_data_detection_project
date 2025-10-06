@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     # Storage Configuration
     UPLOAD_DIRECTORY: str = "../uploads"
     OUTPUT_DIRECTORY: str = "../outputs"
+    SESSION_DIRECTORY: str = "../sessions"
     
     # Processing Configuration
     ENABLE_FACE_BLUR: bool = True
@@ -42,6 +43,10 @@ class Settings(BaseSettings):
     MAX_BLUR_KERNEL_SIZE: int = 45
     BLUR_FOCUS_EXP: float = 2.5
     BLUR_BASE_WEIGHT: float = 0.35
+    
+    # Session Management
+    SESSION_TIMEOUT_HOURS: int = 24
+    SESSION_CLEANUP_INTERVAL_MINUTES: int = 60
     
     # Security
     SECRET_KEY: str = "your-secret-key-here-change-in-production"

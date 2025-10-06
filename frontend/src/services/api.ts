@@ -2,7 +2,14 @@ import axios, { AxiosResponse } from 'axios';
 import { ProcessingResult, HealthResponse, ModelInfo, FilesListResponse, SessionInfo, SessionCreateResponse } from '../types/api';
 import { SessionService } from './sessionService';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+// Determine API base URL: prefer explicit env, else same-origin (for unified container), else localhost fallback.
+const API_BASE_URL = (() => {
+  if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL;
+  if (typeof window !== 'undefined') {
+    return window.location.origin; // same-origin deployment (fullstack container)
+  }
+  return 'http://localhost:8000';
+})();
 
 const apiClient = axios.create({
   baseURL: `${API_BASE_URL}/api/v1`,

@@ -1,0 +1,122 @@
+name: Backend CI & Deploy (Railway)
+
+on:
+  push:
+    branches: [ main, dev ]
+    paths:
+      - 'backend/**'
+      - 'model/**'
+      - '.github/workflows/backend-railway-ci-cd.yml'
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Optional explicit image tag to deploy
+        required: false
+
+env:
+  IMAGE_NAME: sensitive-data-backend
+  DOCKERHUB_ORG: ${{ secrets.DOCKERHUB_ORG }}
+  RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE_NAME }}
+
+jobs:
+  build-test-push:
+    name: Build, Test & Push Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+
+      - name: Install test dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        working-directory: backend
+        run: pytest -q
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Derive image tag
+        id: meta
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+             TAG=${{ github.event.inputs.image_tag }}
+          else
+             TAG=${GITHUB_SHA::7}
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Build & Push
+        run: |
+          TAG=${{ steps.meta.outputs.tag }}
+          docker build -t $DOCKERHUB_ORG/$IMAGE_NAME:$TAG -f backend/Dockerfile .
+          docker push $DOCKERHUB_ORG/$IMAGE_NAME:$TAG
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            docker tag $DOCKERHUB_ORG/$IMAGE_NAME:$TAG $DOCKERHUB_ORG/$IMAGE_NAME:latest
+            docker push $DOCKERHUB_ORG/$IMAGE_NAME:latest
+          fi
+
+      - name: Export tag artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-image-tag
+          path: backend/requirements.txt
+          retention-days: 1
+
+  deploy:
+    name: Deploy to Railway
+    runs-on: ubuntu-latest
+    needs: build-test-push
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set tag
+        id: tag
+        run: echo "value=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Install Railway CLI
+        run: npm i -g @railway/cli
+
+      - name: Authenticate Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway login --token $RAILWAY_TOKEN
+          railway link --project ${{ secrets.RAILWAY_PROJECT_ID }}
+          if [ -n "${{ secrets.RAILWAY_ENVIRONMENT }}" ]; then
+            railway environment ${{ secrets.RAILWAY_ENVIRONMENT }}
+          fi
+
+      - name: Deploy (prebuilt image)
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          TAG=${{ steps.tag.outputs.value }}
+          if [ -z "${{ env.RAILWAY_SERVICE }}" ]; then
+            echo "RAILWAY_SERVICE_NAME secret not set; will attempt default service detection.";
+          fi
+          # Deploy using Docker Hub image reference (immutable tag)
+          railway deploy \
+            --service $RAILWAY_SERVICE \
+            --image $DOCKERHUB_ORG/$IMAGE_NAME:$TAG \
+            --detach || echo "If deploy fails due to CLI changes, confirm railway CLI syntax."
+
+      - name: Output service domains
+        run: railway domains || echo "List domains requires appropriate permissions."

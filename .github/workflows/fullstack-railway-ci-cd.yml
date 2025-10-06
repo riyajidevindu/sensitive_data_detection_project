@@ -1,0 +1,120 @@
+name: Fullstack (Frontend+Backend) CI & Deploy to Railway
+
+on:
+  push:
+    branches: [ main, dev ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'model/**'
+      - 'Dockerfile'
+      - '.github/workflows/fullstack-railway-ci-cd.yml'
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Optional explicit image tag to deploy
+        required: false
+
+env:
+  IMAGE_NAME: sensitive-data-fullstack
+  DOCKERHUB_ORG: ${{ secrets.DOCKERHUB_ORG }}
+  RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE_NAME_FULLSTACK }}
+
+jobs:
+  build-test-frontend-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Derive tag
+        id: meta
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then TAG=${{ github.event.inputs.image_tag }}; else TAG=${GITHUB_SHA::7}; fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+            node-version: 18
+            cache: 'npm'
+            cache-dependency-path: frontend/package.json
+
+      - name: Frontend install & build
+        working-directory: frontend
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend deps & run tests
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt
+          pytest -q
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build multi-stage fullstack image
+        run: |
+          TAG=${{ steps.meta.outputs.tag }}
+          docker build -t $DOCKERHUB_ORG/$IMAGE_NAME:$TAG .
+          docker push $DOCKERHUB_ORG/$IMAGE_NAME:$TAG
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            docker tag $DOCKERHUB_ORG/$IMAGE_NAME:$TAG $DOCKERHUB_ORG/$IMAGE_NAME:latest
+            docker push $DOCKERHUB_ORG/$IMAGE_NAME:latest
+          fi
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@0.22.0
+        with:
+          image-ref: ${{ env.DOCKERHUB_ORG }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }}
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '0'
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-test-frontend-backend
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Derive tag again
+        id: tag
+        run: echo "value=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Install Railway CLI
+        run: npm i -g @railway/cli
+
+      - name: Railway auth & link
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway login --token $RAILWAY_TOKEN
+          railway link --project ${{ secrets.RAILWAY_PROJECT_ID }}
+          if [ -n "${{ secrets.RAILWAY_ENVIRONMENT }}" ]; then
+            railway environment ${{ secrets.RAILWAY_ENVIRONMENT }}
+          fi
+
+      - name: Deploy fullstack image
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          TAG=${{ steps.tag.outputs.value }}
+          railway deploy \
+            --service $RAILWAY_SERVICE \
+            --image $DOCKERHUB_ORG/$IMAGE_NAME:$TAG \
+            --detach || echo "Deployment command may need update if Railway CLI changes."
+
+      - name: List domains
+        run: railway domains || true

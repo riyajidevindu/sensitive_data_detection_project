@@ -148,8 +148,11 @@ class FaceRecognitionBlur:
         *,
         tolerance: Optional[float] = None,
         blur_kernel: int = 51,
-    ) -> np.ndarray:
-        """Blur all faces except the stored reference face in the provided image."""
+    ) -> dict:
+        """Blur all faces except the stored reference face in the provided image.
+        
+        Returns a dictionary with processing statistics including total_faces count.
+        """
         if self._encoding is None:
             raise FaceRecognitionBlurError("Reference encoding missing. Load a reference face before processing images.")
 
@@ -159,6 +162,10 @@ class FaceRecognitionBlur:
 
         logger.debug("Detecting faces in %s", image_path)
         rectangles = self._detect_faces(image_gray)
+
+        total_faces = len(rectangles)
+        blurred_faces = 0
+        matching_faces = 0
 
         if not rectangles:
             logger.warning("No faces detected in %s", image_path)
@@ -182,6 +189,7 @@ class FaceRecognitionBlur:
             if embedding is not None:
                 similarity = float(np.dot(self.reference_encoding, embedding))
                 if similarity >= effective_tolerance:
+                    matching_faces += 1
                     logger.debug(
                         "Found a matching face (similarity=%.3f) that will remain unblurred at position (%s, %s, %s, %s)",
                         similarity,
@@ -194,6 +202,7 @@ class FaceRecognitionBlur:
 
             blurred = cv2.GaussianBlur(face_region_bgr, (kernel, kernel), 0)
             image_bgr[y : y + h, x : x + w] = blurred
+            blurred_faces += 1
             logger.debug("Blurred non-matching face at (%s, %s, %s, %s)", x, y, w, h)
 
         if output_path is not None:
@@ -202,7 +211,12 @@ class FaceRecognitionBlur:
             cv2.imwrite(str(out_path), image_bgr)
             logger.info("Saved selectively blurred image to %s", out_path)
 
-        return image_bgr
+        return {
+            'total_faces': total_faces,
+            'blurred_faces': blurred_faces,
+            'matching_faces': matching_faces,
+            'image': image_bgr
+        }
 
     def process_images(
         self,

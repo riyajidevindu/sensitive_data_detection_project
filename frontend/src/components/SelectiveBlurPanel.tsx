@@ -56,6 +56,7 @@ const SelectiveBlurPanel: React.FC<SelectiveBlurPanelProps> = ({ onProcessingRes
     has_reference: boolean;
     uploaded_at?: number;
   } | null>(null);
+  const [filesToProcess, setFilesToProcess] = useState<File[]>([]);
   const [processingFile, setProcessingFile] = useState<File | null>(null);
   const [tolerance, setTolerance] = useState(0.75);
   const [blurKernel, setBlurKernel] = useState(51);
@@ -160,14 +161,38 @@ const SelectiveBlurPanel: React.FC<SelectiveBlurPanelProps> = ({ onProcessingRes
     accept: {
       'image/*': ['.jpeg', '.jpg', '.png', '.webp']
     },
-    multiple: false,
+    multiple: true,
     onDrop: useCallback((acceptedFiles: File[]) => {
       if (acceptedFiles.length > 0) {
-        setProcessingFile(acceptedFiles[0]);
-        handleSelectiveBlur(acceptedFiles[0]);
+        setFilesToProcess(prev => [...prev, ...acceptedFiles]);
+        setError(null);
       }
-    }, [tolerance, blurKernel]),
+    }, []),
   });
+
+  const processAllFiles = async () => {
+    if (filesToProcess.length === 0) return;
+    
+    setProcessing(true);
+    setError(null);
+    
+    for (const file of filesToProcess) {
+      setProcessingFile(file);
+      try {
+        await handleSelectiveBlur(file);
+      } catch (err) {
+        console.error(`Failed to process ${file.name}:`, err);
+      }
+    }
+    
+    setProcessing(false);
+    setProcessingFile(null);
+    setFilesToProcess([]);
+  };
+
+  const removeFileToProcess = (index: number) => {
+    setFilesToProcess(prev => prev.filter((_, i) => i !== index));
+  };
 
   const hasReference = referenceUploaded || referenceStatus?.has_reference;
 
@@ -299,14 +324,17 @@ const SelectiveBlurPanel: React.FC<SelectiveBlurPanelProps> = ({ onProcessingRes
         <DropzonePaper 
           {...processDropzone.getRootProps()} 
           isDragActive={processDropzone.isDragActive}
-          sx={{ opacity: hasReference ? 1 : 0.5, pointerEvents: hasReference ? 'auto' : 'none' }}
+          sx={{ opacity: hasReference ? 1 : 0.5, pointerEvents: (hasReference && !processing) ? 'auto' : 'none' }}
         >
-          <input {...processDropzone.getInputProps()} disabled={!hasReference} />
+          <input {...processDropzone.getInputProps()} disabled={!hasReference || processing} />
           {processing ? (
             <>
               <CircularProgress size={40} />
               <Typography variant="h6" sx={{ mt: 2 }}>
                 Processing {processingFile?.name}...
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {filesToProcess.indexOf(processingFile!) + 1} of {filesToProcess.length}
               </Typography>
             </>
           ) : (
@@ -314,9 +342,9 @@ const SelectiveBlurPanel: React.FC<SelectiveBlurPanelProps> = ({ onProcessingRes
               <BlurOn sx={{ fontSize: 40, color: hasReference ? 'primary.main' : 'grey.400', mb: 1 }} />
               <Typography variant="h6" color={hasReference ? 'text.primary' : 'text.disabled'}>
                 {processDropzone.isDragActive 
-                  ? 'Drop image to process' 
+                  ? 'Drop images to process' 
                   : hasReference 
-                    ? 'Apply selective blur to images'
+                    ? 'Add images to process'
                     : 'Upload reference face first'
                 }
               </Typography>
@@ -329,6 +357,39 @@ const SelectiveBlurPanel: React.FC<SelectiveBlurPanelProps> = ({ onProcessingRes
             </>
           )}
         </DropzonePaper>
+
+        {/* Files Queue */}
+        {filesToProcess.length > 0 && !processing && (
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
+              Files to Process ({filesToProcess.length})
+            </Typography>
+            <Stack spacing={1}>
+              {filesToProcess.map((file, index) => (
+                <Paper key={index} sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} variant="outlined">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Upload fontSize="small" color="action" />
+                    <Typography variant="body2">{file.name}</Typography>
+                    <Chip size="small" label={`${(file.size / 1024).toFixed(1)} KB`} />
+                  </Box>
+                  <IconButton size="small" onClick={() => removeFileToProcess(index)} color="error">
+                    <Clear fontSize="small" />
+                  </IconButton>
+                </Paper>
+              ))}
+            </Stack>
+            <Button
+              variant="contained"
+              fullWidth
+              size="large"
+              startIcon={<BlurOn />}
+              onClick={processAllFiles}
+              sx={{ mt: 2 }}
+            >
+              Process {filesToProcess.length} {filesToProcess.length === 1 ? 'Image' : 'Images'}
+            </Button>
+          </Box>
+        )}
       </Box>
     </Paper>
   );

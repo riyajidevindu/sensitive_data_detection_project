@@ -111,6 +111,7 @@ async def selective_blur_image(
 
     try:
         # Store the uploaded image
+        start_time = datetime.now()
         input_path = await handler.save_upload_file(file_content, file.filename)
         
         # Initialize face recognition blur processor
@@ -121,13 +122,17 @@ async def selective_blur_image(
         output_filename = handler.generate_output_filename(file.filename, "_selective_blur")
         output_path = os.path.join(settings.OUTPUT_DIRECTORY, output_filename)
         
-        # Apply selective blurring
-        processed_image = processor.selective_blur_image(
+        # Apply selective blurring and get face statistics
+        result_stats = processor.selective_blur_image(
             input_path,
             output_path,
             tolerance=tolerance,
             blur_kernel=blur_kernel or 51,
         )
+        
+        # Calculate processing time
+        end_time = datetime.now()
+        processing_time = (end_time - start_time).total_seconds()
         
         # Get file stats
         output_stats = os.stat(output_path)
@@ -138,10 +143,10 @@ async def selective_blur_image(
             original_filename=file.filename,
             processed_filename=output_filename,
             detections=[],  # No detections for selective blur
-            processing_time=0.0,  # We could measure this if needed
+            processing_time=processing_time,
             timestamp=datetime.fromtimestamp(output_stats.st_mtime),
-            total_detections=0,
-            face_count=0,  # Could be enhanced to count faces
+            total_detections=result_stats.get('total_faces', 0),
+            face_count=result_stats.get('total_faces', 0),
             plate_count=0,
             blur_parameters=BlurParameters(
                 min_kernel_size=blur_kernel or 51,

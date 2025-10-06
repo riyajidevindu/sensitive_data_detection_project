@@ -80,19 +80,49 @@ const UploadSettingsPanel: React.FC<UploadSettingsPanelProps> = ({
   onReset,
 }) => {
   return (
-    <Paper elevation={0} sx={{ p: 4, borderRadius: 4, border: '1px solid', borderColor: 'divider' }}>
-      <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>
+    <Paper elevation={2} sx={{ p: 3, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+      <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, mb: 1 }}>
         Upload & Configure
       </Typography>
+      
+      {/* File Count Badge */}
+      {filesCount > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <Box sx={{ 
+            display: 'inline-flex', 
+            alignItems: 'center', 
+            gap: 1, 
+            px: 2, 
+            py: 0.5, 
+            borderRadius: 1, 
+            backgroundColor: 'primary.light',
+            color: 'primary.dark'
+          }}>
+            <CheckCircle fontSize="small" />
+            <Typography variant="body2" fontWeight={600}>
+              {filesCount} file{filesCount > 1 ? 's' : ''} ready to process
+            </Typography>
+          </Box>
+        </Box>
+      )}
+
       <DropzonePaper
         {...dropzone.getRootProps()}
         isDragActive={dropzone.isDragActive}
         elevation={0}
+        sx={{ borderRadius: 1 }}
       >
         <input {...dropzone.getInputProps()} />
         <CloudUpload sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
-        <Typography variant="h6">{dropzone.isDragActive ? 'Drop to upload' : 'Drag & drop images'}</Typography>
-        <Typography variant="body2" color="text.secondary">or click to select</Typography>
+        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+          {dropzone.isDragActive ? '📂 Drop files here!' : '📁 Drag & drop images'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          or click to browse from your device
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+          Supports: JPG, PNG, JPEG
+        </Typography>
       </DropzonePaper>
 
       <Box sx={{ mt: 4 }}>
@@ -207,7 +237,7 @@ const UploadSettingsPanel: React.FC<UploadSettingsPanelProps> = ({
           <LinearProgress
             variant="determinate"
             value={uploadProgress}
-            sx={{ mt: 1.5, height: 8, borderRadius: 4 }}
+            sx={{ mt: 1.5, height: 8, borderRadius: 1 }}
           />
         )}
       </Box>

@@ -62,11 +62,12 @@ const UploadPage: React.FC = () => {
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
       {/* Tab Navigation */}
-      <Paper elevation={0} sx={{ mb: 4, borderRadius: 2 }}>
+      <Paper elevation={2} sx={{ mb: 4, borderRadius: 1, overflow: 'hidden' }}>
         <Tabs 
           value={activeTab} 
           onChange={(_, newValue) => setActiveTab(newValue)}
           sx={{ borderBottom: 1, borderColor: 'divider' }}
+          variant="fullWidth"
         >
           <Tab 
             icon={<PhotoLibrary />} 

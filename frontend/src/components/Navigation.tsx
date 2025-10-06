@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppBar, Tabs, Tab, Container, styled, useTheme, IconButton, Tooltip } from '@mui/material';
+import { AppBar, Tabs, Tab, Container, styled, useTheme, IconButton, Tooltip, Box } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import HomeIcon from '@mui/icons-material/Home';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
@@ -47,11 +47,51 @@ const Navigation: React.FC = () => {
 
   return (
     <AppBar position="sticky" color="default" elevation={0}>
-      <Container maxWidth="lg" sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <Container maxWidth="lg" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1 }}>
+        {/* Logo Section */}
+        <Box 
+          onClick={() => navigate('/')}
+          sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            cursor: 'pointer',
+            gap: 1.5,
+            '&:hover': {
+              opacity: 0.8
+            }
+          }}
+        >
+          <img 
+            src={`${process.env.PUBLIC_URL}/logo.png`} 
+            alt="Logo" 
+            style={{ 
+              height: '40px', 
+              width: 'auto',
+              objectFit: 'contain'
+            }}
+            onError={(e) => {
+              // Fallback if logo.png doesn't exist, hide the image
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
+          <Box 
+            sx={{ 
+              display: { xs: 'none', sm: 'block' },
+              fontWeight: 700,
+              fontSize: '1.2rem',
+              background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
+            Sensitive Data Detector
+          </Box>
+        </Box>
+        
+        {/* Navigation Tabs */}
         <Tabs
           value={getTabValue()}
           onChange={handleTabChange}
-          centered
           TabIndicatorProps={{
             children: <motion.div layoutId="indicator" style={{ height: '4px', backgroundColor: theme.palette.primary.main, borderRadius: '2px' }} />,
           }}
@@ -60,8 +100,10 @@ const Navigation: React.FC = () => {
           <StyledTab icon={<CloudUploadIcon />} label="Upload & Process" iconPosition="start" />
           <StyledTab icon={<HistoryIcon />} label="History" iconPosition="start" />
         </Tabs>
+        
+        {/* Theme Toggle */}
         <Tooltip title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}>
-          <IconButton onClick={toggleTheme} color="inherit" sx={{ ml: 2 }}>
+          <IconButton onClick={toggleTheme} color="inherit">
             {isDarkMode ? <Brightness7Icon /> : <Brightness4Icon />}
           </IconButton>
         </Tooltip>
